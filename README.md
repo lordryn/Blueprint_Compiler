@@ -24,53 +24,53 @@ The application is designed to be lightweight, easy to maintain, and perfectly a
 
 ## **📂 Project Structure**
 ```
-Blueprint\_Compiler/  
+Blueprint_Compiler/  
 │  
-├── app.py                  \# Main Flask application, routing, and API endpoints  
-├── blueprints.json         \# Master database of all blueprints (Update this on game patches)  
-├── requirements.txt        \# Python dependencies  
+├── app.py                  # Main Flask application, routing, and API endpoints  
+├── blueprints.json         # Master database of all blueprints (Update this on game patches)  
+├── requirements.txt        # Python dependencies  
 │  
 ├── static/                   
-│   ├── styles.css          \# Wyvern core stylesheets and fallback variables  
-│   └── app.js              \# External JS scripts (if separated from index.html)  
+│   ├── styles.css          # Wyvern core stylesheets and fallback variables  
+│   └── app.js              # External JS scripts (if separated from index.html)  
 │  
 └── templates/  
-    └── index.html          \# Main application frontend (Jinja2 Template)
+    └── index.html          # Main application frontend (Jinja2 Template)
 ```
 ## **🚀 Local Development Setup**
 
 To contribute to the compiler or test data updates locally, follow these steps:
 
-### **1\. Environment Setup**
+### **1. Environment Setup**
 
 Ensure you have Python installed. We highly recommend using a virtual environment to prevent dependency conflicts with other Wyvern projects.
 ```
-git clone https://github.com/lordryn/Blueprint\_Compiler.git  
-cd Blueprint\_Compiler  
-python \-m venv venv
+git clone https://github.com/lordryn/Blueprint_Compiler.git  
+cd Blueprint_Compiler  
+python -m venv venv
 ```
 ```
-\# Activate the virtual environment:  
-\# Windows: venv\\Scripts\\activate  
-\# Mac/Linux: source venv/bin/activate
+# Activate the virtual environment:  
+# Windows: venvScriptsactivate  
+# Mac/Linux: source venv/bin/activate
 ```
-### **2\. Install Dependencies**
+### **2. Install Dependencies**
 ```
-pip install \-r requirements.txt
+pip install -r requirements.txt
 ```
-### **3\. Initialize & Run**
+### **3. Initialize & Run**
 ```
 python app.py
 ```
 The application will boot on http://127.0.0.1:5000.
 
-*Note: On initial boot, app.py will automatically run `db.create\_all()` to generate the local `crafters.db` file.*
+*Note: On initial boot, app.py will automatically run `db.create_all()` to generate the local `crafters.db` file.*
 
 ## **🔒 Production & Deployment Notes**
 
 Before deploying this to the live Wyvern infrastructure, ensure the following are addressed:
 
-1. **Secret Key Management:** Ensure `app.config\['SECRET\_KEY'\]` in `app.py` is dynamically loaded from the production server's environment variables (e.g., `os.environ.get('SECRET\_KEY')`). Do not hardcode production keys in the repo.  
+1. **Secret Key Management:** Ensure `app.config['SECRET_KEY']` in `app.py` is dynamically loaded from the production server's environment variables (e.g., `os.environ.get('SECRET_KEY')`). Do not hardcode production keys in the repo.  
 2. **WSGI Server:** Flask's built-in server is for development only. For production deployment, bind the application using a production WSGI server like gunicorn or uWSGI.  
 3. **Database Backups:** Set up a cron job on the host server to periodically back up `crafters.db` to prevent loss of the organization's crafter ledger.
 
