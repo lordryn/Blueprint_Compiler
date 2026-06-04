@@ -1,4 +1,5 @@
 # **🛠️ Blueprint Compiler | Wyvern Imperial Order**
+<img width="1686" height="914" alt="image" src="https://github.com/user-attachments/assets/71c7834d-3b9c-417d-b00f-a8dd95104da3" />
 
 **Internal Documentation & Developer Guide**
 
