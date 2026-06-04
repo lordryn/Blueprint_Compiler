@@ -63,7 +63,7 @@ pip install -r requirements.txt
 ```
 python app.py
 ```
-The application will boot on http://127.0.0.1:5000.
+The application will boot on http://127.0.0.1:5000
 
 *Note: On initial boot, app.py will automatically run `db.create_all()` to generate the local `crafters.db` file.*
 
