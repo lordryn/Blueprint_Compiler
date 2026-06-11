@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ org.name }} | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-panel-header: #242b3a;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--app-line);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+        h1 {
+            margin: 0;
+            color: var(--app-line);
+        }
+        .header-links a {
+            color: var(--app-text);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: bold;
+        }
+        .header-links a:hover {
+            color: var(--app-line);
+        }
+        .admin-link {
+            color: var(--app-line) !important;
+            border: 1px solid var(--app-line);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 40px;
+        }
+        .section {
+            background-color: var(--app-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            margin-top: 0;
+            color: var(--app-line);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        /* Tab Filter Styles */
+        .category-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            background-color: #10141d;
+            border: 1px solid var(--border-color);
+            color: var(--app-text);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .tab-btn.active, .tab-btn:hover {
+            border-color: var(--app-line);
+            color: var(--app-line);
+            background-color: rgba(0, 255, 208, 0.05);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--app-line);
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--app-line);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background-color: #00cca3;
+        }
+        .form-inline {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        select, input {
+            padding: 8px;
+            background-color: #10141d;
+            border: 1px solid var(--border-color);
+            color: var(--app-text);
+            border-radius: 4px;
+        }
+        .alert {
+            background-color: rgba(0, 255, 208, 0.1);
+            border: 1px solid var(--app-line);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .material-tag {
+            background-color: #1a2333;
+            border: 1px solid #2d3d52;
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin: 2px;
+            display: inline-block;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 style="font-size: 2.2em;">{{ org.name }}</h1>
+            <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Requisition & Crafter Ledger System</div>
+        </div>
+        <div class="header-links">
+            <a href="/">← Back to Portal</a>
+            {% if user_role == 'Admin' %}
+            <a href="/org/{{ org.slug }}/admin" class="admin-link">SYSTEM ADMIN</a>
+            {% endif %}
+            <a href="/logout" style="color: #ff6b6b;">Logout</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert">
+          {% for message in messages %}
+            <div>{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="grid">
+        <div class="main-column">
+            <!-- Requisitions Ledger -->
+            <div class="section">
+                <h2>ACTIVE REQUISITIONS</h2>
+                {% if requisitions %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Requested Item</th>
+                            <th>Qty</th>
+                            <th>Requested By</th>
+                            <th>Materials Needed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in requisitions %}
+                        <tr>
+                            <td><strong>{{ req.blueprint_name }}</strong></td>
+                            <td>{{ req.quantity }}</td>
+                            <td>{{ req.user.username }}</td>
+                            <td>
+                                <!-- We look up the blueprint by name dynamically -->
+                                {% set matched_bp = [] %}
+                                {% for bp in blueprints %}
+                                    {% if bp.blueprint_name == req.blueprint_name %}
+                                        {% set _ = matched_bp.append(bp) %}
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if matched_bp %}
+                                    {% for mat in matched_bp[0].materials %}
+                                        <span class="material-tag">{{ mat.slot }}: {{ mat.name }} ({{ mat.amount }})</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span style="color:#a0aec0;">Standard Parts</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #a0aec0;">No active requisitions at this time. All units fully provisioned.</p>
+                {% endif %}
+            </div>
+
+            <!-- Master Blueprint Catalog with Category Tabs -->
+            <div class="section">
+                <h2>MASTER BLUEPRINT CATALOG</h2>
+                
+                <div class="category-tabs">
+                    <button class="tab-btn active" onclick="filterCategory('all')">ALL ITEMS</button>
+                    {% for cat in categories %}
+                    <button class="tab-btn" onclick="filterCategory('{{ cat }}')">{{ cat | upper }}</button>
+                    {% endfor %}
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Blueprint Item</th>
+                            <th>Manufacturer</th>
+                            <th>Size</th>
+                            <th>Materials Required</th>
+                            <th>Time</th>
+                            <th>Crafters Available</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bp in blueprints %}
+                        <tr class="blueprint-row" data-category="{{ bp.category }}">
+                            <td>
+                                <strong>{{ bp.blueprint_name }}</strong>
+                                {% if bp.grade %}<span style="color:#00ffd0; font-size:0.8em; margin-left:5px;">[Grade {{ bp.grade }}]</span>{% endif %}
+                            </td>
+                            <td>{{ bp.manufacturer or '—' }}</td>
+                            <td>S{{ bp.size or '1' }}</td>
+                            <td>
+                                {% for mat in bp.materials %}
+                                <span class="material-tag" title="{{ mat.slot }}">{{ mat.name }} ({{ mat.amount }})</span>
+                                {% endfor %}
+                            </td>
+                            <td>{{ bp.crafting_time or 'N/A' }}</td>
+                            <td>
+                                {% set crafters = crafters_map.get(bp.blueprint_name, []) %}
+                                {% if crafters %}
+                                    {% for crafter in crafters %}
+                                        <span style="color: #00ffd0; font-weight:bold;">{{ crafter }}</span>{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <span style="color: #ff6b6b; font-size: 0.9em; font-style:italic;">None listed</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form action="/org/{{ org.slug }}/claim" method="POST" style="display:inline;">
+                                    <input type="hidden" name="blueprint_name" value="{{ bp.blueprint_name }}">
+                                    <button type="submit" class="btn" style="padding: 6px 12px; font-size: 0.85em;">I HAVE THIS</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <!-- Submit Requisition Form -->
+            <div class="section">
+                <h2>REQUEST ITEMS</h2>
+                <form action="/org/{{ org.slug }}/requisition" method="POST">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom: 5px;">Select Blueprint</label>
+                        <select name="blueprint_name" style="width:100%; box-sizing:border-box;" required>
+                            {% for bp in blueprints %}
+                            <option value="{{ bp.blueprint_name }}">{{ bp.blueprint_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="display:block; margin-bottom: 5px;">Quantity</label>
+                        <input type="number" name="quantity" min="1" value="1" style="width:100%; box-sizing:border-box;" required>
+                    </div>
+                    <button type="submit" class="btn" style="width:100%;">SUBMIT REQUISITION</button>
+                </form>
+            </div>
+
+            <!-- Crafter Summary Ledger -->
+            <div class="section">
+                <h2>ALL REGISTRY CLAIMS</h2>
+                {% if crafters_map %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Blueprint Item</th>
+                            <th>Crafters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bp_name, crafter_list in crafters_map.items() %}
+                        <tr>
+                            <td><strong>{{ bp_name }}</strong></td>
+                            <td>
+                                {% for crafter in crafter_list %}
+                                <span style="color: #00ffd0;">{{ crafter }}</span>{% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #a0aec0;">No crafters registered yet. Grab some blueprints!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function filterCategory(category) {
+            // Update active tab styles
+            const buttons = document.querySelectorAll('.tab-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            // Toggle rows
+            const rows = document.querySelectorAll('.blueprint-row');
+            rows.forEach(row => {
+                if (category === 'all' || row.getAttribute('data-category') === category) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

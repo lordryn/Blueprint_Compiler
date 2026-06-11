@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create Organization | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .form-panel {
+            background-color: var(--app-panel);
+            border: 1px solid var(--app-line);
+            padding: 40px;
+            border-radius: 8px;
+            width: 400px;
+            box-shadow: 0 4px 15px rgba(0, 255, 208, 0.1);
+        }
+        h2 {
+            margin-top: 0;
+            color: var(--app-line);
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #2d3748;
+            background-color: #10141d;
+            color: var(--app-text);
+            box-sizing: border-box;
+        }
+        input:focus {
+            border-color: var(--app-line);
+            outline: none;
+        }
+        .helper-text {
+            font-size: 0.8em;
+            color: #a0aec0;
+            margin-top: 5px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 4px;
+            border: none;
+            background-color: var(--app-line);
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #00cca3;
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 0.85em;
+        }
+        a {
+            color: var(--app-line);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-panel">
+        <h2>REGISTER ORGANIZATION</h2>
+        <form action="/org/create" method="POST">
+            <div class="form-group">
+                <label>Organization Name</label>
+                <input type="text" name="name" placeholder="e.g. Wyvern Imperial Order" required>
+            </div>
+            <div class="form-group">
+                <label>Custom URL Slug</label>
+                <input type="text" name="slug" placeholder="e.g. wyvern" required>
+                <div class="helper-text">Your organization dashboard will live at: /org/&lt;slug&gt;</div>
+            </div>
+            <button type="submit">CREATE SYSTEM</button>
+        </form>
+        <div class="back-link">
+            <a href="/">← Back to Portal</a>
+        </div>
+    </div>
+</body>
+</html>

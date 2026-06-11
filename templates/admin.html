@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Unified Admin Dashboard | {{ org.name }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-panel-header: #242b3a;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+            --error-color: #ff6b6b;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--app-line);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+        h1 {
+            margin: 0;
+            color: var(--app-line);
+        }
+        .header-links a {
+            color: var(--app-text);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: bold;
+        }
+        .header-links a:hover {
+            color: var(--app-line);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+        .section {
+            background-color: var(--app-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            margin-top: 0;
+            color: var(--app-line);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--app-line);
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--app-line);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background-color: #00cca3;
+        }
+        .btn-danger {
+            background-color: var(--error-color);
+            color: #000;
+        }
+        .btn-danger:hover {
+            background-color: #ff4d4d;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input {
+            padding: 8px;
+            background-color: #10141d;
+            border: 1px solid var(--border-color);
+            color: var(--app-text);
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .alert {
+            background-color: rgba(0, 255, 208, 0.1);
+            border: 1px solid var(--app-line);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .help-text {
+            font-size: 0.85em;
+            color: #a0aec0;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>{{ org.name }} | Unified Admin</h1>
+            <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Security, Member, and Data Pipeline Administration</div>
+        </div>
+        <div class="header-links">
+            <a href="/org/{{ org.slug }}">← Back to Dashboard</a>
+            <a href="/">Portal Hub</a>
+            <a href="/logout" style="color: #ff6b6b;">Logout</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert">
+          {% for message in messages %}
+            <div>{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="grid">
+        <div class="left-column">
+            <!-- Section: Member Role Management -->
+            <div class="section">
+                <h2>MEMBER SECURITY & ROLES</h2>
+                <p class="help-text" style="margin-bottom: 20px;">Manage member authorizations and assign tiered access clearance inside your organization.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Current Role</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for membership in memberships %}
+                        <tr>
+                            <td><strong>{{ membership.user.username }}</strong></td>
+                            <td>{{ membership.user.email }}</td>
+                            <td><span style="color: var(--app-line);">{{ membership.role.name }}</span></td>
+                            <td>
+                                <form action="/org/{{ org.slug }}/admin" method="POST" style="display:flex; gap:5px;">
+                                    <input type="hidden" name="action_type" value="update_role">
+                                    <input type="hidden" name="user_id" value="{{ membership.user.id }}">
+                                    <select name="role_id" style="width: auto; padding: 4px 8px;">
+                                        {% for role in all_roles %}
+                                        <option value="{{ role.id }}" {% if role.id == membership.role_id %}selected{% endif %}>{{ role.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn" style="padding: 4px 8px; font-size: 0.85em;">Update</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Section: Pending Join Requests -->
+            <div class="section">
+                <h2>PENDING MEMBERSHIP REQUESTS</h2>
+                <p class="help-text" style="margin-bottom: 20px;">Review authorization requests from users attempting to register and join your organization slug.</p>
+                {% if pending_requests %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email Address</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in pending_requests %}
+                        <tr>
+                            <td><strong>{{ req.user.username }}</strong></td>
+                            <td>{{ req.user.email }}</td>
+                            <td>
+                                <div style="display: flex; gap: 10px;">
+                                    <form action="/org/{{ org.slug }}/admin/approve-request/{{ req.id }}" method="POST">
+                                        <button type="submit" class="btn" style="padding: 6px 12px; font-size: 0.85em;">APPROVE</button>
+                                    </form>
+                                    <form action="/org/{{ org.slug }}/admin/reject-request/{{ req.id }}" method="POST">
+                                        <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 0.85em;">REJECT</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #a0aec0; font-style:italic;">No pending join requests at this time.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Section: Catalog Data Pipeline Tools -->
+        <div class="section">
+            <h2>CATALOG DATA PIPELINE</h2>
+            <p class="help-text" style="margin-bottom: 25px;">Acquire raw blueprints directly from global repositories, sanitize inputs, and compile the master blueprints catalog.</p>
+            
+            <!-- Grabber Tool -->
+            <div style="margin-bottom: 35px; border-bottom: 1px solid var(--border-color); padding-bottom: 25px;">
+                <h3 style="color: var(--app-line); margin-top: 0;">1. Catalog Grabber (bp_catalog_grabber)</h3>
+                <p class="help-text" style="margin-bottom: 15px;">Connects to external repository URLs to fetch raw patch manifest data and dumps it to a local JSON file.</p>
+                <form action="/org/{{ org.slug }}/admin/grab-catalog" method="POST">
+                    <button type="submit" class="btn">TRIGGER GRABBER PIPELINE</button>
+                </form>
+            </div>
+
+            <!-- Parser Tool -->
+            <div>
+                <h3 style="color: var(--app-line); margin-top: 0;">2. Schema Parser (parser)</h3>
+                <p class="help-text" style="margin-bottom: 15px;">Parses raw dumps, standardizes materials/sizes, resolves duplicates, and rebuilds the active database 'blueprints.json'.</p>
+                <form action="/org/{{ org.slug }}/admin/parse-catalog" method="POST">
+                    <button type="submit" class="btn btn-danger">RUN COMPILER & PARSER</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

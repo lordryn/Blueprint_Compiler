@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Join {{ org.name }} | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .join-panel {
+            background-color: var(--app-panel);
+            border: 1px solid var(--app-line);
+            padding: 40px;
+            border-radius: 8px;
+            width: 450px;
+            box-shadow: 0 4px 15px rgba(0, 255, 208, 0.1);
+            text-align: center;
+        }
+        h2 {
+            margin-top: 0;
+            color: var(--app-line);
+        }
+        p {
+            color: #a0aec0;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 4px;
+            border: none;
+            background-color: var(--app-line);
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #00cca3;
+        }
+        .back-link {
+            display: block;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: var(--app-text);
+            text-decoration: none;
+        }
+        .back-link:hover {
+            color: var(--app-line);
+        }
+    </style>
+</head>
+<body>
+    <div class="join-panel">
+        <h2>REQUEST ACCESS</h2>
+        <h3 style="margin-bottom: 20px; color: #fff;">{{ org.name }}</h3>
+        
+        <p>You are not currently registered as an authorized crafter or member of this organization. To browse their master blueprints catalog, register claims, or submit requisitions, you must submit a join request for administrator review.</p>
+        
+        <form action="/org/{{ org.slug }}/join" method="POST">
+            <button type="submit" class="btn">REQUEST TO JOIN ORGANIZATION</button>
+        </form>
+        
+        <a href="/" class="back-link">← Return to Portal Hub</a>
+    </div>
+</body>
+</html>
