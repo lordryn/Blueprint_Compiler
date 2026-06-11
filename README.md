@@ -1,10 +1,10 @@
-# **🛠️ Blueprint Compiler | Wyvern Imperial Order**
+# **🛠️ Blueprint Compiler**
 
 ![Portal Hub Dashboard](assets/portal_hub.png)
 
 **Internal Documentation & Developer Guide**
 
-This repository contains the source code for the Wyvern Imperial Order's Requisition & Crafter Ledger System (Blueprint Compiler). This application serves as an internal multi-tenant organizational tool to bridge the gap between members requiring specific items and the crafters who hold the necessary blueprints.
+This repository contains the source code for a Multi-Tenant Requisition & Crafter Ledger System (Blueprint Compiler). This application serves as an internal multi-tenant organizational tool to bridge the gap between members requiring specific items and the crafters who hold the necessary blueprints.
 
 By decentralizing the "who can craft what" ledger, we reduce administrative overhead and streamline in-game logistics.
 
@@ -14,7 +14,7 @@ By decentralizing the "who can craft what" ledger, we reduce administrative over
 
 The application is built as a multi-tenant, role-based requisition management application with an automated web scraping data pipeline.
 
-* **Multi-Tenant Organizations:** Users can register accounts, create organizations with unique URL slugs (e.g. `/org/wvn`), send requests to join existing organizations, and manage organization membership.
+* **Multi-Tenant Organizations:** Users can register accounts, create organizations with unique URL slugs (e.g. `/org/my-org`), send requests to join existing organizations, and manage organization membership.
 * **Role-Based Access Control (RBAC):** Organization members are assigned specific roles which dictate permissions:
   * `Admin`: Full control over org settings, membership approvals, role modifications, and ledger pruning.
   * `Manager`: Control over claims registry and active requisitions.
@@ -29,7 +29,7 @@ The application is built as a multi-tenant, role-based requisition management ap
   * **Parser (`blueprint_parser.py`):** Parses raw HTML components using BeautifulSoup4, compiling names, categories, sizes, manufacturers, crafting times, and material quantities into `blueprints.json`.
   * **Automated Scheduler:** A background `Flask-APScheduler` task runs the Grabber and Parser nightly to keep the catalog fresh automatically.
 * **Dynamic Claim Ledger (SQLite):** User details, tenant organizations, membership roles, claims, requisitions, and join requests are managed with `Flask-SQLAlchemy` and stored in `crafters.db`.
-* **Visual Styling:** Styled using custom CSS variables (`--app-panel`, `--app-line`, and `--app-text`) matching Wyvern's standard layout.
+* **Visual Styling:** Styled using custom CSS variables (`--app-panel`, `--app-line`, and `--app-text`) for a sleek, modern UI.
 
 ---
 
@@ -143,7 +143,7 @@ python blueprint_parser.py
 
 ## **🔒 Production & Deployment Notes**
 
-Before deploying this to the live Wyvern infrastructure:
+Before deploying this to your live production infrastructure:
 
 1. **Secret Key Management:** Ensure `SECRET_KEY` is loaded securely from the environment using `os.environ.get('SECRET_KEY')`.
 2. **Database Migrations:** When updating the `models.py` schema, the SQLite `instance/crafters.db` must be migrated or reset.
@@ -152,4 +152,4 @@ Before deploying this to the live Wyvern infrastructure:
 
 ---
 
-*For the Wyvern Imperial Order* 🐉
+*Open Source Community Edition* 🚀
