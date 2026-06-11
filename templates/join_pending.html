@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Join Pending | {{ org.name }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .pending-panel {
+            background-color: var(--app-panel);
+            border: 1px solid var(--app-line);
+            padding: 40px;
+            border-radius: 8px;
+            width: 450px;
+            box-shadow: 0 4px 15px rgba(0, 255, 208, 0.1);
+            text-align: center;
+        }
+        h2 {
+            margin-top: 0;
+            color: var(--app-line);
+        }
+        p {
+            color: #a0aec0;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .status-badge {
+            display: inline-block;
+            background-color: rgba(255, 215, 0, 0.15);
+            border: 1px solid #ffd700;
+            color: #ffd700;
+            font-weight: bold;
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+        }
+        .back-link {
+            display: block;
+            font-size: 0.9em;
+            color: var(--app-text);
+            text-decoration: none;
+        }
+        .back-link:hover {
+            color: var(--app-line);
+        }
+    </style>
+</head>
+<body>
+    <div class="pending-panel">
+        <h2>MEMBERSHIP PENDING</h2>
+        <h3 style="margin-bottom: 25px; color: #fff;">{{ org.name }}</h3>
+        
+        <div class="status-badge">Awaiting Administrator Review</div>
+        
+        <p>Your request to join this organization was submitted on <strong>{{ join_req.created_at.strftime('%Y-%m-%d %H:%M') }}</strong>. Please check back later or contact your organization's administrators on Discord to expedite your security clearance.</p>
+        
+        <a href="/" class="back-link">← Return to Portal Hub</a>
+    </div>
+</body>
+</html>
