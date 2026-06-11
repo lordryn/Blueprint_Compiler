@@ -104,6 +104,7 @@
         {% endwith %}
 
         <form action="/login" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="form-group">
                 <label>Username or Email</label>
                 <input type="text" name="username_or_email" required>

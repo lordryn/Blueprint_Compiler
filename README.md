@@ -1,5 +1,6 @@
 # **🛠️ Blueprint Compiler | Wyvern Imperial Order**
-<img width="1686" height="914" alt="image" src="https://github.com/user-attachments/assets/71c7834d-3b9c-417d-b00f-a8dd95104da3" />
+
+![Portal Hub Dashboard](assets/portal_hub.png)
 
 **Internal Documentation & Developer Guide**
 
@@ -13,23 +14,40 @@ By decentralizing the "who can craft what" ledger, we reduce administrative over
 
 The application is built as a multi-tenant, role-based requisition management application with an automated web scraping data pipeline.
 
-* **Multi-Tenant Organizations:** Users can register accounts, create organizations with unique URL slugs (e.g. `/org/wyvern`), send requests to join existing organizations, and manage organization membership.
+* **Multi-Tenant Organizations:** Users can register accounts, create organizations with unique URL slugs (e.g. `/org/wvn`), send requests to join existing organizations, and manage organization membership.
 * **Role-Based Access Control (RBAC):** Organization members are assigned specific roles which dictate permissions:
-  * `Admin`: Full control over org settings, membership approvals, role modifications, and catalog synchronization.
+  * `Admin`: Full control over org settings, membership approvals, role modifications, and ledger pruning.
   * `Manager`: Control over claims registry and active requisitions.
   * `Member`: Standard user; can submit claims ("I HAVE THIS"), make requisitions, and view catalog lists.
   * `Viewer`: Read-only observer.
-* **Data Integration Pipeline:** A automated web scraper and parser system allows administrators to update the master catalog of items directly from scmdb.net:
+* **Global Site Administration:** A specialized portal designed for global control:
+  * Manually approve or suspend new user accounts.
+  * Grant global Site Admin privileges to other users.
+  * Centrally manage the master blueprint catalog grabber.
+* **Data Integration Pipeline:** An automated web scraper and parser system allows administrators to update the master catalog of items directly from scmdb.net:
   * **Grabber (`bp_catalog_grabber.py`):** Uses Selenium (Chrome headless driver) to download dynamic fabricator items from the web database, saving raw components to `blueprints unprocessed.txt`.
-  * **Parser (`blueprint_parser.py`):** Parses raw HTML components using BeautifulSoup4, compiles names, categories, sizes, manufacturers, crafting times, and material quantities into `blueprints.json`.
+  * **Parser (`blueprint_parser.py`):** Parses raw HTML components using BeautifulSoup4, compiling names, categories, sizes, manufacturers, crafting times, and material quantities into `blueprints.json`.
+  * **Automated Scheduler:** A background `Flask-APScheduler` task runs the Grabber and Parser nightly to keep the catalog fresh automatically.
 * **Dynamic Claim Ledger (SQLite):** User details, tenant organizations, membership roles, claims, requisitions, and join requests are managed with `Flask-SQLAlchemy` and stored in `crafters.db`.
 * **Visual Styling:** Styled using custom CSS variables (`--app-panel`, `--app-line`, and `--app-text`) matching Wyvern's standard layout.
 
 ---
 
+## **📸 Interface Showcases**
+
+### **Organization Dashboard & Ledger**
+![Organization Dashboard](assets/org_dashboard.png)
+*Interactive ledgers where users can tag themselves as crafters, submit requisitions, and administrators can prune inactive claims.*
+
+### **Site Administration Portal**
+![Site Administration Portal](assets/site_admin.png)
+*Centralized management for user account approvals, manual user creation, and controlling the background data catalog pipelines.*
+
+---
+
 ## **🧰 Tech Stack**
 
-* **Backend Core:** Python 3.8+, Flask
+* **Backend Core:** Python 3.8+, Flask, Flask-APScheduler
 * **Database & ORM:** Flask-SQLAlchemy, SQLite (`crafters.db`)
 * **Scraping & Parsing:** Selenium, BeautifulSoup4, webdriver-manager
 * **Frontend:** HTML5, Jinja2 Templating, Vanilla JavaScript (ES6)
@@ -42,14 +60,16 @@ The application is built as a multi-tenant, role-based requisition management ap
 ```
 Blueprint_Compiler/  
 │  
-├── app.py                  # Main Flask application, routing, and tenant controllers
+├── app.py                  # Main Flask application, routing, scheduler, and tenant controllers
 ├── models.py               # Database models (User, Org, Role, Claims, Requisitions, Requests)
 ├── bp_catalog_grabber.py   # Selenium web scraper for scmdb.net fabricator catalog
-├── blueprint_parser.py    # BeautifulSoup HTML card parser & database compiler
+├── blueprint_parser.py     # BeautifulSoup HTML card parser & database compiler
 ├── blueprints.json         # Master database of all parsed blueprints (active catalog)
 ├── blueprints unprocessed.txt # Raw HTML cards downloaded by catalog grabber
 ├── requirements.txt        # Python dependency manifest
-├── crafters.db             # Local SQLite database (Auto-generated on boot)
+├── instance/crafters.db    # Local SQLite database (Auto-generated on boot)
+│  
+├── assets/                 # Generated documentation imagery
 │  
 ├── static/                   
 │   └── styles.css          # Core stylesheets and visual variables  
@@ -60,7 +80,8 @@ Blueprint_Compiler/
     ├── register.html       # Authentication registration portal
     ├── create_org.html     # Registration form for a new organization
     ├── dashboard.html      # Organization requisition and catalog panel
-    ├── admin.html          # Admin panel (member roles, join requests, scraper control)
+    ├── admin.html          # Admin panel (member roles, join requests)
+    ├── site_admin.html     # Global site admin control panel
     ├── join.html           # Request form to join an organization
     ├── join_pending.html   # Status indicator for pending join requests
     └── join_req_modal.html # Helper widgets
@@ -95,18 +116,18 @@ pip install -r requirements.txt
 python app.py
 ```
 The application will boot on **http://127.0.0.1:5000**.
-*Note: On initial boot, the application will automatically initialize the database schema and default roles inside `instance/crafters.db`.*
+*Note: On initial boot, the application will automatically initialize the database schema and default roles inside `instance/crafters.db`. The very first registered user is automatically granted Site Admin privileges.*
 
 ---
 
 ## **⚙️ Catalog Sync Operations (Grabber & Parser)**
 
-Administrators can update the master `blueprints.json` database directly from the application's Admin Dashboard or via command line:
+Administrators can update the master `blueprints.json` database manually or rely on the automated nightly cron jobs.
 
-### **Method A: From Admin UI**
-1. Navigate to `/org/<your-org-slug>/admin`.
-2. Click **Grab Raw Catalog** to start the Selenium runner and scrape scmdb.net.
-3. Click **Compile Catalog JSON** to trigger the BeautifulSoup parser and update `blueprints.json`.
+### **Method A: From Site Admin UI**
+1. Navigate to `/site-admin`.
+2. Click **TRIGGER GRABBER PIPELINE** to start the Selenium runner and scrape scmdb.net.
+3. Click **RUN COMPILER & PARSER** to trigger the BeautifulSoup parser and update `blueprints.json`.
 
 ### **Method B: From CLI**
 Run the scripts sequentially inside your virtual environment:
@@ -124,9 +145,10 @@ python blueprint_parser.py
 
 Before deploying this to the live Wyvern infrastructure:
 
-1. **Secret Key Management:** Ensure `SECRET_KEY` is loaded from the environment: `os.environ.get('SECRET_KEY')`.
-2. **WSGI Server:** Bind the application using a production WSGI server (e.g. `gunicorn` or `waitress`) instead of the Flask debug runner.
-3. **Database Backups:** Schedule routine backups for `instance/crafters.db` to prevent data loss.
+1. **Secret Key Management:** Ensure `SECRET_KEY` is loaded securely from the environment using `os.environ.get('SECRET_KEY')`.
+2. **Database Migrations:** When updating the `models.py` schema, the SQLite `instance/crafters.db` must be migrated or reset.
+3. **WSGI Server:** Bind the application using a production WSGI server (e.g., `gunicorn` or `waitress`) instead of the default Werkzeug runner.
+4. **Cloudflare Tunneling:** The app runs locally on port 5000 and is designed to sit behind a `cloudflared` reverse proxy or reverse proxy server (NGINX/Apache) terminating SSL. 
 
 ---
 

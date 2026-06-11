@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Site Administration | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-panel-header: #242b3a;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+            --error-color: #ff6b6b;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--app-line);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+        h1 {
+            margin: 0;
+            color: var(--app-line);
+        }
+        .header-links a {
+            color: var(--app-text);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: bold;
+        }
+        .header-links a:hover {
+            color: var(--app-line);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+        .section {
+            background-color: var(--app-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            margin-top: 0;
+            color: var(--app-line);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--app-line);
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--app-line);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background-color: #00cca3;
+        }
+        .btn-danger {
+            background-color: var(--error-color);
+            color: #000;
+        }
+        .btn-danger:hover {
+            background-color: #ff4d4d;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input {
+            padding: 8px;
+            background-color: #10141d;
+            border: 1px solid var(--border-color);
+            color: var(--app-text);
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .alert {
+            background-color: rgba(0, 255, 208, 0.1);
+            border: 1px solid var(--app-line);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .help-text {
+            font-size: 0.85em;
+            color: #a0aec0;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>SITE ADMINISTRATION PORTAL</h1>
+            <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Global user management and catalog controls</div>
+        </div>
+        <div class="header-links">
+            <a href="/">← Return to Portal</a>
+            <a href="/logout" style="color: #ff6b6b;">Logout</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert">
+          {% for message in messages %}
+            <div>{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="grid">
+        <div class="left-column">
+            <div class="section">
+                <h2>USER MANAGEMENT</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Site Admin</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td>{{ u.id }}</td>
+                            <td><strong>{{ u.username }}</strong></td>
+                            <td>{{ u.email }}</td>
+                            <td>
+                                {% if u.status == 'Approved' %}
+                                    <span style="color: #4ade80;">{{ u.status }}</span>
+                                {% elif u.status == 'Pending' %}
+                                    <span style="color: #facc15;">{{ u.status }}</span>
+                                {% else %}
+                                    <span style="color: #ef4444;">{{ u.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ 'Yes' if u.is_site_admin else 'No' }}</td>
+                            <td>
+                                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                    {% if u.status != 'Approved' %}
+                                    <form action="/site-admin/user/{{ u.id }}/approve" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn" style="padding: 4px 8px; font-size: 0.8em;">APPROVE</button>
+                                    </form>
+                                    {% endif %}
+                                    
+                                    {% if u.status != 'Suspended' %}
+                                    <form action="/site-admin/user/{{ u.id }}/suspend" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8em;">SUSPEND</button>
+                                    </form>
+                                    {% endif %}
+                                    
+                                    {% if not u.is_site_admin %}
+                                    <form action="/site-admin/user/{{ u.id }}/make_admin" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn" style="padding: 4px 8px; font-size: 0.8em; background-color: #f59e0b; color: #000;">MAKE ADMIN</button>
+                                    </form>
+                                    {% elif u.id != session.user_id %}
+                                    <form action="/site-admin/user/{{ u.id }}/remove_admin" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn" style="padding: 4px 8px; font-size: 0.8em; background-color: #6b7280; color: #fff;">REMOVE ADMIN</button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="section">
+                <h2>MANUALLY CREATE USER</h2>
+                <form action="/site-admin/create-user" method="POST" style="max-width: 500px;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn" style="margin-top: 10px;">CREATE APPROVED USER</button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="right-column">
+            <div class="section">
+                <h2>MASTER CATALOG TOOLS</h2>
+                <p class="help-text" style="margin-bottom: 25px;">Acquire raw blueprints directly from global repositories, sanitize inputs, and compile the master blueprints catalog.</p>
+                
+                <div style="margin-bottom: 35px; border-bottom: 1px solid var(--border-color); padding-bottom: 25px;">
+                    <h3 style="color: var(--app-line); margin-top: 0;">1. Catalog Grabber</h3>
+                    <p class="help-text" style="margin-bottom: 15px;">Connects to external repository URLs to fetch raw patch manifest data and dumps it to a local JSON file.</p>
+                    <form action="/site-admin/grab-catalog" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn">TRIGGER GRABBER PIPELINE</button>
+                    </form>
+                </div>
+                
+                <div style="margin-bottom: 35px; border-bottom: 1px solid var(--border-color); padding-bottom: 25px;">
+                    <h3 style="color: var(--app-line); margin-top: 0;">2. Schema Parser</h3>
+                    <p class="help-text" style="margin-bottom: 15px;">Parses raw dumps into the active blueprints.json catalog.</p>
+                    <form action="/site-admin/parse-catalog" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn-danger">RUN COMPILER & PARSER</button>
+                    </form>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h3 style="color: var(--app-line); margin-top: 0;">Auto-Update Scheduler</h3>
+                    <p class="help-text">A background task runs the Grabber and Parser automatically every day at midnight (00:00 server time).</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,32 +1,60 @@
 import os
 import json
-import hashlib
+import re
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, jsonify
+from flask_wtf.csrf import CSRFProtect
+from flask_apscheduler import APScheduler
+from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User, Organization, Role, UserOrganizationRole, Claim, Requisition, JoinRequest
 from bp_catalog_grabber import pull_fabricator_blueprints
 from blueprint_parser import process_blueprints
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
+# Use a static fallback for development, but in production this should be set via env
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_default_secret_key_change_in_production')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///crafters.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+csrf = CSRFProtect(app)
 db.init_app(app)
 
+# Scheduler setup
+scheduler = APScheduler()
+scheduler.api_enabled = True
+scheduler.init_app(app)
+scheduler.start()
 
-# Helper function for password hashing using hashlib
+@scheduler.task('cron', id='update_catalog', hour='0', minute='0')
+def scheduled_catalog_update():
+    # Since background tasks don't have request context, we just run the pipeline functions
+    try:
+        pull_fabricator_blueprints()
+        process_blueprints('blueprints unprocessed.txt', 'blueprints.json')
+    except Exception as e:
+        print(f"Scheduled update failed: {e}")
+
+# Database initialization wrapper
+with app.app_context():
+    db.create_all()
+
+    # Initialize basic Roles if empty
+    if Role.query.count() == 0:
+        admin_role = Role(name='Admin', description='Full control over membership, roles, and grabber')
+        manager_role = Role(name='Manager', description='Control claims and requisitions')
+        member_role = Role(name='Member', description='Standard user, can make claims and view lists')
+        viewer_role = Role(name='Viewer', description='Read-only observer')
+        db.session.add_all([admin_role, manager_role, member_role, viewer_role])
+        db.session.commit()
+
+
+# Helper function for password hashing
 def hash_password(password):
-    salt = os.urandom(16)
-    pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
-    return salt.hex() + ":" + pw_hash.hex()
+    return generate_password_hash(password)
 
 
 def check_password(stored_hash, password):
     try:
-        salt_hex, hash_hex = stored_hash.split(":")
-        salt = bytes.fromhex(salt_hex)
-        pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
-        return pw_hash.hex() == hash_hex
+        return check_password_hash(stored_hash, password)
     except Exception:
         return False
 
@@ -77,23 +105,26 @@ def organization_role_required(allowed_roles):
     return decorator
 
 
-# Database initialization wrapper
-@app.before_request
-def setup_db():
-    db.create_all()
+def site_admin_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash("Please log in to access this page.", "error")
+            return redirect(url_for('login'))
+        user = User.query.get(session['user_id'])
+        if not user or not user.is_site_admin:
+            abort(403, description="You must be a Site Administrator to access this page.")
+        return f(*args, **kwargs)
+    return decorated_function
 
-    # Initialize basic Roles if empty
-    if Role.query.count() == 0:
-        admin_role = Role(name='Admin', description='Full control over membership, roles, and grabber')
-        manager_role = Role(name='Manager', description='Control claims and requisitions')
-        member_role = Role(name='Member', description='Standard user, can make claims and view lists')
-        viewer_role = Role(name='Viewer', description='Read-only observer')
-        db.session.add_all([admin_role, manager_role, member_role, viewer_role])
-        db.session.commit()
 
+# Master Blueprint data loader with simple caching
+_blueprint_catalog_cache = []
+_blueprint_catalog_mtime = 0
 
-# Master Blueprint data loader
 def load_blueprint_catalog():
+    global _blueprint_catalog_cache, _blueprint_catalog_mtime
     catalog_path = 'blueprints.json'
     if not os.path.exists(catalog_path):
         default_catalog = [
@@ -120,10 +151,14 @@ def load_blueprint_catalog():
         return default_catalog
 
     try:
-        with open(catalog_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        current_mtime = os.path.getmtime(catalog_path)
+        if current_mtime != _blueprint_catalog_mtime or not _blueprint_catalog_cache:
+            with open(catalog_path, 'r', encoding='utf-8') as f:
+                _blueprint_catalog_cache = json.load(f)
+            _blueprint_catalog_mtime = current_mtime
+        return _blueprint_catalog_cache
     except Exception:
-        return []
+        return _blueprint_catalog_cache or []
 
 
 # --- Standard Core Routes ---
@@ -144,8 +179,16 @@ def login():
 
         user = User.query.filter((User.username == username_or_email) | (User.email == username_or_email)).first()
         if user and check_password(user.password_hash, password):
+            if user.status == 'Pending':
+                flash("Your account is pending administrator approval.", "warning")
+                return redirect(url_for('login'))
+            elif user.status == 'Suspended':
+                flash("Your account has been suspended.", "error")
+                return redirect(url_for('login'))
+                
             session['user_id'] = user.id
             session['username'] = user.username
+            session['is_site_admin'] = user.is_site_admin
             flash("Welcome back!", "success")
             return redirect(url_for('index'))
 
@@ -164,20 +207,34 @@ def register():
             flash("All fields are required.", "error")
             return redirect(url_for('register'))
 
+        if not re.match(r'^[\w.@+-]+$', username):
+            flash("Username contains invalid characters.", "error")
+            return redirect(url_for('register'))
+
         existing_user = User.query.filter((User.username == username) | (User.email == email)).first()
         if existing_user:
             flash("Username or email already exists.", "error")
             return redirect(url_for('register'))
 
         pw_hash = hash_password(password)
-        new_user = User(username=username, email=email, password_hash=pw_hash)
+        
+        is_first_user = User.query.count() == 0
+        status = 'Approved' if is_first_user else 'Pending'
+        is_site_admin = True if is_first_user else False
+
+        new_user = User(username=username, email=email, password_hash=pw_hash, is_site_admin=is_site_admin, status=status)
         db.session.add(new_user)
         db.session.commit()
 
-        session['user_id'] = new_user.id
-        session['username'] = new_user.username
-        flash("Account created successfully!", "success")
-        return redirect(url_for('index'))
+        if status == 'Approved':
+            session['user_id'] = new_user.id
+            session['username'] = new_user.username
+            session['is_site_admin'] = new_user.is_site_admin
+            flash("Account created successfully! You are the Site Admin.", "success")
+            return redirect(url_for('index'))
+        else:
+            flash("Account created! Your account is pending administrator approval.", "info")
+            return redirect(url_for('login'))
     return render_template('register.html')
 
 
@@ -197,6 +254,10 @@ def create_organization():
 
         if not name or not slug:
             flash("All fields are required.", "error")
+            return redirect(url_for('create_organization'))
+
+        if not re.match(r'^[a-z0-9-]+$', slug):
+            flash("Organization URL slug can only contain lowercase letters, numbers, and hyphens.", "error")
             return redirect(url_for('create_organization'))
 
         existing_org = Organization.query.filter_by(slug=slug).first()
@@ -256,7 +317,11 @@ def organization_dashboard(org_slug):
     for c in org_claims:
         if c.blueprint_name not in crafters_map:
             crafters_map[c.blueprint_name] = []
-        crafters_map[c.blueprint_name].append(c.user.username)
+        crafters_map[c.blueprint_name].append({
+            'username': c.user.username,
+            'user_id': c.user_id,
+            'claim_id': c.id
+        })
 
     # Requisitions
     org_reqs = Requisition.query.filter_by(organization_id=org.id, status='Pending').all()
@@ -356,6 +421,42 @@ def submit_requisition(org_slug):
     db.session.add(new_req)
     db.session.commit()
     flash("Requisition submitted to organization crafters.", "success")
+    return redirect(url_for('organization_dashboard', org_slug=org_slug))
+
+
+@app.route('/org/<org_slug>/claim/<int:claim_id>/delete', methods=['POST'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def delete_claim(org_slug, claim_id):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    claim = Claim.query.filter_by(id=claim_id, organization_id=org.id).first_or_404()
+    
+    # Check permissions: User must own the claim OR be an Admin
+    user_role = UserOrganizationRole.query.filter_by(user_id=session['user_id'], organization_id=org.id).first()
+    if claim.user_id != session['user_id'] and (not user_role or user_role.role.name != 'Admin'):
+        abort(403, description="You do not have permission to delete this claim.")
+        
+    db.session.delete(claim)
+    db.session.commit()
+    flash("Blueprint claim removed successfully.", "success")
+    return redirect(url_for('organization_dashboard', org_slug=org_slug))
+
+
+@app.route('/org/<org_slug>/requisition/<int:req_id>/delete', methods=['POST'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def delete_requisition(org_slug, req_id):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    req = Requisition.query.filter_by(id=req_id, organization_id=org.id).first_or_404()
+    
+    # Check permissions: User must own the requisition OR be an Admin
+    user_role = UserOrganizationRole.query.filter_by(user_id=session['user_id'], organization_id=org.id).first()
+    if req.user_id != session['user_id'] and (not user_role or user_role.role.name != 'Admin'):
+        abort(403, description="You do not have permission to delete this requisition.")
+        
+    db.session.delete(req)
+    db.session.commit()
+    flash("Requisition removed successfully.", "success")
     return redirect(url_for('organization_dashboard', org_slug=org_slug))
 
 
@@ -462,32 +563,83 @@ def admin_reject_join_request(org_slug, request_id):
     return redirect(url_for('organization_admin', org_slug=org_slug))
 
 
-# --- Admin Tools: Unified Catalog Grabber and Parser Interfaces ---
+# --- Site Admin Dashboard ---
 
-@app.route('/org/<org_slug>/admin/grab-catalog', methods=['POST'])
-@login_required
-@organization_role_required(['Admin'])
-def admin_grab_catalog(org_slug):
+@app.route('/site-admin', methods=['GET', 'POST'])
+@site_admin_required
+def site_admin():
+    users = User.query.all()
+    return render_template('site_admin.html', users=users)
+
+@app.route('/site-admin/user/<int:user_id>/<action>', methods=['POST'])
+@site_admin_required
+def site_admin_user_action(user_id, action):
+    user = User.query.get_or_404(user_id)
+    if action == 'approve':
+        user.status = 'Approved'
+        flash(f"Approved user {user.username}.", "success")
+    elif action == 'suspend':
+        user.status = 'Suspended'
+        flash(f"Suspended user {user.username}.", "warning")
+    elif action == 'make_admin':
+        user.is_site_admin = True
+        flash(f"Granted Site Admin to {user.username}.", "success")
+    elif action == 'remove_admin':
+        if user.id == session['user_id']:
+            flash("You cannot remove your own admin status.", "error")
+        else:
+            user.is_site_admin = False
+            flash(f"Removed Site Admin from {user.username}.", "success")
+    
+    db.session.commit()
+    return redirect(url_for('site_admin'))
+
+@app.route('/site-admin/create-user', methods=['POST'])
+@site_admin_required
+def site_admin_create_user():
+    username = request.form.get('username').strip()
+    email = request.form.get('email').strip()
+    password = request.form.get('password')
+    
+    if not username or not email or not password:
+        flash("All fields are required.", "error")
+        return redirect(url_for('site_admin'))
+
+    if not re.match(r'^[\w.@+-]+$', username):
+        flash("Username contains invalid characters.", "error")
+        return redirect(url_for('site_admin'))
+
+    existing_user = User.query.filter((User.username == username) | (User.email == email)).first()
+    if existing_user:
+        flash("Username or email already exists.", "error")
+        return redirect(url_for('site_admin'))
+
+    pw_hash = hash_password(password)
+    new_user = User(username=username, email=email, password_hash=pw_hash, is_site_admin=False, status='Approved')
+    db.session.add(new_user)
+    db.session.commit()
+    flash(f"Created new approved user: {username}", "success")
+    return redirect(url_for('site_admin'))
+
+@app.route('/site-admin/grab-catalog', methods=['POST'])
+@site_admin_required
+def site_admin_grab_catalog():
     try:
         pull_fabricator_blueprints()
         flash("Successfully grabbed raw manifest elements from scmdb.net.", "success")
     except Exception as e:
         flash(f"Grabber pipeline exception: {str(e)}", "error")
+    return redirect(url_for('site_admin'))
 
-    return redirect(url_for('organization_admin', org_slug=org_slug))
-
-
-@app.route('/org/<org_slug>/admin/parse-catalog', methods=['POST'])
-@login_required
-@organization_role_required(['Admin'])
-def admin_parse_catalog(org_slug):
+@app.route('/site-admin/parse-catalog', methods=['POST'])
+@site_admin_required
+def site_admin_parse_catalog():
     try:
         process_blueprints('blueprints unprocessed.txt', 'blueprints.json')
         flash("Successfully compiled dynamic cards into active blueprints.json catalog.", "success")
     except Exception as e:
         flash(f"Parser pipeline exception: {str(e)}", "error")
-
-    return redirect(url_for('organization_admin', org_slug=org_slug))
+    return redirect(url_for('site_admin'))
 
 
 if __name__ == '__main__':

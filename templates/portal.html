@@ -148,6 +148,9 @@
     <div class="header">
         <h1>REQUISITION PORTAL</h1>
         <div>
+            {% if session.get('is_site_admin') %}
+            <a href="/site-admin" class="enter-btn" style="margin-top: 0; margin-right: 20px; background-color: transparent; border: 1px solid var(--app-line); color: var(--app-line);">SITE ADMIN</a>
+            {% endif %}
             <span style="margin-right: 20px;">Welcome, <strong>{{ session['username'] }}</strong></span>
             <a href="/logout" class="logout-btn">Logout</a>
         </div>

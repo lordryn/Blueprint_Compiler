@@ -90,6 +90,7 @@
     <div class="form-panel">
         <h2>REGISTER ORGANIZATION</h2>
         <form action="/org/create" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="form-group">
                 <label>Organization Name</label>
                 <input type="text" name="name" placeholder="e.g. Wyvern Imperial Order" required>

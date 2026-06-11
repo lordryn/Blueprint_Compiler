@@ -144,6 +144,19 @@
             display: inline-block;
             font-size: 0.85em;
         }
+        .remove-icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--error-color);
+            cursor: pointer;
+            padding: 0 4px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .remove-icon-btn:hover {
+            color: #ff4d4d;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
@@ -184,6 +197,7 @@
                             <th>Qty</th>
                             <th>Requested By</th>
                             <th>Materials Needed</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -207,6 +221,14 @@
                                     {% endfor %}
                                 {% else %}
                                     <span style="color:#a0aec0;">Standard Parts</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if req.user_id == session.user_id or user_role == 'Admin' %}
+                                <form action="/org/{{ org.slug }}/requisition/{{ req.id }}/delete" method="POST" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8em;">REMOVE</button>
+                                </form>
                                 {% endif %}
                             </td>
                         </tr>
@@ -260,17 +282,34 @@
                                 {% set crafters = crafters_map.get(bp.blueprint_name, []) %}
                                 {% if crafters %}
                                     {% for crafter in crafters %}
-                                        <span style="color: #00ffd0; font-weight:bold;">{{ crafter }}</span>{% if not loop.last %}, {% endif %}
+                                        <span style="color: #00ffd0; font-weight:bold;">{{ crafter.username }}</span>{% if not loop.last %}, {% endif %}
                                     {% endfor %}
                                 {% else %}
                                     <span style="color: #ff6b6b; font-size: 0.9em; font-style:italic;">None listed</span>
                                 {% endif %}
                             </td>
                             <td>
+                                {% set user_has_claimed = namespace(value=false) %}
+                                {% set user_claim_id = namespace(value=0) %}
+                                {% for crafter in crafters %}
+                                    {% if crafter.user_id == session.user_id %}
+                                        {% set user_has_claimed.value = true %}
+                                        {% set user_claim_id.value = crafter.claim_id %}
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if user_has_claimed.value %}
+                                <form action="/org/{{ org.slug }}/claim/{{ user_claim_id.value }}/delete" method="POST" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 0.85em;">REMOVE MY CLAIM</button>
+                                </form>
+                                {% else %}
                                 <form action="/org/{{ org.slug }}/claim" method="POST" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <input type="hidden" name="blueprint_name" value="{{ bp.blueprint_name }}">
                                     <button type="submit" class="btn" style="padding: 6px 12px; font-size: 0.85em;">I HAVE THIS</button>
                                 </form>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -284,6 +323,7 @@
             <div class="section">
                 <h2>REQUEST ITEMS</h2>
                 <form action="/org/{{ org.slug }}/requisition" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom: 5px;">Select Blueprint</label>
                         <select name="blueprint_name" style="width:100%; box-sizing:border-box;" required>
@@ -317,7 +357,16 @@
                             <td><strong>{{ bp_name }}</strong></td>
                             <td>
                                 {% for crafter in crafter_list %}
-                                <span style="color: #00ffd0;">{{ crafter }}</span>{% if not loop.last %}, {% endif %}
+                                <div style="display: inline-flex; align-items: center; margin-right: 5px;">
+                                    <span style="color: #00ffd0;">{{ crafter.username }}</span>
+                                    {% if crafter.user_id == session.user_id or user_role == 'Admin' %}
+                                    <form action="/org/{{ org.slug }}/claim/{{ crafter.claim_id }}/delete" method="POST" style="display:inline; margin-left: 2px;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="remove-icon-btn" title="Remove claim">✖</button>
+                                    </form>
+                                    {% endif %}
+                                    {% if not loop.last %}, {% endif %}
+                                </div>
                                 {% endfor %}
                             </td>
                         </tr>

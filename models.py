@@ -28,6 +28,8 @@ class User(db.Model):
     username = db.Column(db.String(50), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
+    is_site_admin = db.Column(db.Boolean, default=False)
+    status = db.Column(db.String(20), default='Pending')  # 'Pending', 'Approved', 'Suspended'
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     
     # Relationships

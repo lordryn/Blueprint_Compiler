@@ -75,6 +75,7 @@
         <p>You are not currently registered as an authorized crafter or member of this organization. To browse their master blueprints catalog, register claims, or submit requisitions, you must submit a join request for administrator review.</p>
         
         <form action="/org/{{ org.slug }}/join" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button type="submit" class="btn">REQUEST TO JOIN ORGANIZATION</button>
         </form>
         
