@@ -328,12 +328,46 @@ def organization_dashboard(org_slug):
     # Requisitions
     org_reqs = Requisition.query.filter_by(organization_id=org.id, status='Pending').all()
 
+    material_totals_dict = {}
+    bp_dict = {bp['blueprint_name']: bp for bp in blueprints}
+
+    for req in org_reqs:
+        bp = bp_dict.get(req.blueprint_name)
+        if bp and 'materials' in bp:
+            for mat in bp['materials']:
+                mat_name = mat.get('name')
+                amt_str = mat.get('amount', '0')
+                
+                match = re.match(r"^([\d.]+)\s*(.*)$", str(amt_str).strip())
+                if match:
+                    val = float(match.group(1))
+                    unit = match.group(2).strip()
+                else:
+                    val = 0.0
+                    unit = ""
+                
+                total_val = val * req.quantity
+                
+                key = (mat_name, unit)
+                if key not in material_totals_dict:
+                    material_totals_dict[key] = 0.0
+                material_totals_dict[key] += total_val
+                
+    material_totals = []
+    for (name, unit), total in material_totals_dict.items():
+        total_str = f"{total:g}"
+        amount_str = f"{total_str} {unit}".strip()
+        material_totals.append({'name': name, 'amount': amount_str})
+        
+    material_totals.sort(key=lambda x: x['name'])
+
     return render_template('dashboard.html',
                            org=org,
                            blueprints=blueprints,
                            categories=categories,
                            crafters_map=crafters_map,
                            requisitions=org_reqs,
+                           material_totals=material_totals,
                            user_role=user_role.role.name)
 
 
