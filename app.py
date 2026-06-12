@@ -5,7 +5,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, a
 from flask_wtf.csrf import CSRFProtect
 from flask_apscheduler import APScheduler
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, User, Organization, Role, UserOrganizationRole, Claim, Requisition, JoinRequest
+from models import db, User, Organization, Role, UserOrganizationRole, Claim, Requisition, JoinRequest, MaterialInventory
 from bp_catalog_grabber import pull_fabricator_blueprints
 from blueprint_parser import process_blueprints
 
@@ -353,11 +353,34 @@ def organization_dashboard(org_slug):
                     material_totals_dict[key] = 0.0
                 material_totals_dict[key] += total_val
                 
+    inventory_records = MaterialInventory.query.filter_by(organization_id=org.id).all()
+    total_inventory = {}
+    inv_breakdown = {}
+    for inv in inventory_records:
+        total_inventory[inv.material_name] = inv.grade_baseline + inv.grade_improved + inv.grade_high_quality + inv.grade_exceptional
+        inv_breakdown[inv.material_name] = {
+            'baseline': inv.grade_baseline,
+            'improved': inv.grade_improved,
+            'high_quality': inv.grade_high_quality,
+            'exceptional': inv.grade_exceptional
+        }
+
     material_totals = []
     for (name, unit), total in material_totals_dict.items():
         total_str = f"{total:g}"
         amount_str = f"{total_str} {unit}".strip()
-        material_totals.append({'name': name, 'amount': amount_str})
+        
+        avail_amt = total_inventory.get(name, 0.0)
+        avail_str = f"{avail_amt:g} {unit}".strip() if avail_amt > 0 else f"0 {unit}".strip()
+        breakdown = inv_breakdown.get(name, {'baseline': 0.0, 'improved': 0.0, 'high_quality': 0.0, 'exceptional': 0.0})
+        
+        material_totals.append({
+            'name': name, 
+            'amount': amount_str,
+            'available': avail_str,
+            'has_enough': avail_amt >= total,
+            'breakdown': breakdown
+        })
         
     material_totals.sort(key=lambda x: x['name'])
 
@@ -495,6 +518,112 @@ def delete_requisition(org_slug, req_id):
     flash("Requisition removed successfully.", "success")
     return redirect(url_for('organization_dashboard', org_slug=org_slug))
 
+
+# --- Material Logging & What Can Be Made ---
+
+@app.route('/org/<org_slug>/materials', methods=['GET', 'POST'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def organization_materials(org_slug):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    
+    if request.method == 'POST':
+        for key, value in request.form.items():
+            if key.startswith('mat_'):
+                parts = key.split('_')
+                if len(parts) >= 3:
+                    grade = parts[-1]
+                    material_name = '_'.join(parts[1:-1])
+                    
+                    try:
+                        val = float(value)
+                    except ValueError:
+                        continue
+                        
+                    inv = MaterialInventory.query.filter_by(organization_id=org.id, material_name=material_name).first()
+                    if not inv:
+                        inv = MaterialInventory(organization_id=org.id, material_name=material_name)
+                        db.session.add(inv)
+                        
+                    if grade == 'baseline':
+                        inv.grade_baseline = val
+                    elif grade == 'improved':
+                        inv.grade_improved = val
+                    elif grade == 'highquality':
+                        inv.grade_high_quality = val
+                    elif grade == 'exceptional':
+                        inv.grade_exceptional = val
+                        
+        db.session.commit()
+        flash("Material inventory updated successfully.", "success")
+        return redirect(url_for('organization_materials', org_slug=org_slug))
+
+    inventory_records = MaterialInventory.query.filter_by(organization_id=org.id).all()
+    blueprints = load_blueprint_catalog()
+    
+    total_inventory = {}
+    for inv in inventory_records:
+        total = inv.grade_baseline + inv.grade_improved + inv.grade_high_quality + inv.grade_exceptional
+        total_inventory[inv.material_name] = total
+        
+    craftable_blueprints = []
+    
+    for bp in blueprints:
+        if not bp.get('materials'):
+            continue
+            
+        max_craftable = float('inf')
+        for mat in bp['materials']:
+            mat_name = mat.get('name')
+            amt_str = mat.get('amount', '0')
+            
+            match = re.match(r"^([\d.]+)\s*(.*)$", str(amt_str).strip())
+            if match:
+                req_val = float(match.group(1))
+            else:
+                req_val = 0.0
+                
+            if req_val > 0:
+                avail = total_inventory.get(mat_name, 0.0)
+                craftable = int(avail // req_val)
+                if craftable < max_craftable:
+                    max_craftable = craftable
+                    
+        if max_craftable > 0 and max_craftable != float('inf'):
+            craftable_blueprints.append({
+                'blueprint_name': bp['blueprint_name'],
+                'category': bp.get('category', 'Other'),
+                'max_craftable': max_craftable
+            })
+            
+    craftable_blueprints.sort(key=lambda x: (-x['max_craftable'], x['blueprint_name']))
+
+    known_materials = set()
+    for bp in blueprints:
+        if bp.get('materials'):
+            for mat in bp['materials']:
+                known_materials.add(mat.get('name'))
+                
+    material_list = []
+    inv_dict = {inv.material_name: inv for inv in inventory_records}
+    for m in sorted(known_materials):
+        inv = inv_dict.get(m)
+        material_list.append({
+            'name': m,
+            'baseline': inv.grade_baseline if inv else 0.0,
+            'improved': inv.grade_improved if inv else 0.0,
+            'high_quality': inv.grade_high_quality if inv else 0.0,
+            'exceptional': inv.grade_exceptional if inv else 0.0,
+            'total': (inv.grade_baseline + inv.grade_improved + inv.grade_high_quality + inv.grade_exceptional) if inv else 0.0
+        })
+
+    user_role = UserOrganizationRole.query.filter_by(user_id=session['user_id'], organization_id=org.id).first()
+
+    return render_template('materials.html',
+                           org=org,
+                           material_list=material_list,
+                           craftable_blueprints=craftable_blueprints,
+                           user_role=user_role.role.name if user_role else 'Viewer')
 
 # --- Unified Admin Dashboard ---
 

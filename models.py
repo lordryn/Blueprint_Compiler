@@ -16,6 +16,7 @@ class Organization(db.Model):
     claims = db.relationship('Claim', back_populates='organization', cascade='all, delete-orphan')
     requisitions = db.relationship('Requisition', back_populates='organization', cascade='all, delete-orphan')
     join_requests = db.relationship('JoinRequest', back_populates='organization', cascade='all, delete-orphan')
+    inventory = db.relationship('MaterialInventory', back_populates='organization', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f"<Organization {self.name}>"
@@ -136,3 +137,24 @@ class JoinRequest(db.Model):
 
     def __repr__(self):
         return f"<JoinRequest User:{self.user_id} Org:{self.organization_id} Status:{self.status}>"
+
+class MaterialInventory(db.Model):
+    """
+    Tracks raw material inventory for an organization by grade.
+    """
+    __tablename__ = 'material_inventory'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+    material_name = db.Column(db.String(250), nullable=False)
+    grade_baseline = db.Column(db.Float, default=0.0)      # 500Q
+    grade_improved = db.Column(db.Float, default=0.0)      # 501Q-749Q
+    grade_high_quality = db.Column(db.Float, default=0.0)  # 750Q-899Q
+    grade_exceptional = db.Column(db.Float, default=0.0)   # 900Q-1000Q
+    last_updated = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    # Relationships
+    organization = db.relationship('Organization', back_populates='inventory')
+
+    def __repr__(self):
+        return f"<MaterialInventory Org:{self.organization_id} Material:{self.material_name}>"

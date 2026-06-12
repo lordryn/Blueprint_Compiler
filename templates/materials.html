@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ org.name }} Materials | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-panel-header: #242b3a;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--app-line);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+        h1 {
+            margin: 0;
+            color: var(--app-line);
+        }
+        .header-links a {
+            color: var(--app-text);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: bold;
+        }
+        .header-links a:hover {
+            color: var(--app-line);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 40px;
+        }
+        .section {
+            background-color: var(--app-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            margin-top: 0;
+            color: var(--app-line);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--app-line);
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--app-line);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background-color: #00cca3;
+        }
+        .alert {
+            background-color: rgba(0, 255, 208, 0.1);
+            border: 1px solid var(--app-line);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        input[type=number] {
+            width: 80px;
+            padding: 5px;
+            background-color: #10141d;
+            border: 1px solid var(--border-color);
+            color: var(--app-text);
+            border-radius: 4px;
+        }
+        .grade-badge {
+            font-size: 0.8em;
+            padding: 2px 5px;
+            border-radius: 3px;
+            margin-bottom: 3px;
+            display: inline-block;
+        }
+        .bg-baseline { background-color: #4a5568; }
+        .bg-improved { background-color: #2b6cb0; }
+        .bg-highquality { background-color: #6b46c1; }
+        .bg-exceptional { background-color: #c53030; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 style="font-size: 2.2em;">{{ org.name }} Materials</h1>
+            <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Inventory & Crafting Availability</div>
+        </div>
+        <div class="header-links">
+            <a href="/org/{{ org.slug }}">← Back to Dashboard</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert">
+          {% for message in messages %}
+            <div>{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="grid">
+        <!-- Inventory Management -->
+        <div class="section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>MATERIAL INVENTORY LOG</h2>
+            </div>
+            
+            <form method="POST" action="/org/{{ org.slug }}/materials">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px; margin-top: 15px;">
+                <table style="margin-top: 0;">
+                    <thead style="position: sticky; top: 0; background-color: var(--app-panel); z-index: 1; box-shadow: 0 2px 2px -1px rgba(0,0,0,0.4);">
+                        <tr>
+                            <th>Material Name</th>
+                            <th>
+                                <span class="grade-badge bg-baseline">500Q</span> Baseline
+                            </th>
+                            <th>
+                                <span class="grade-badge bg-improved">501Q-749Q</span> Improved
+                            </th>
+                            <th>
+                                <span class="grade-badge bg-highquality">750Q-899Q</span> High Quality
+                            </th>
+                            <th>
+                                <span class="grade-badge bg-exceptional">900Q-1000Q</span> Exceptional
+                            </th>
+                            <th>Total Available</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mat in material_list %}
+                        <tr>
+                            <td><strong>{{ mat.name }}</strong></td>
+                            <td>
+                                <input type="number" step="0.01" min="0" name="mat_{{ mat.name }}_baseline" value="{{ mat.baseline }}">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" name="mat_{{ mat.name }}_improved" value="{{ mat.improved }}">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" name="mat_{{ mat.name }}_highquality" value="{{ mat.high_quality }}">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" name="mat_{{ mat.name }}_exceptional" value="{{ mat.exceptional }}">
+                            </td>
+                            <td style="color: var(--app-line); font-weight: bold; font-size: 1.1em;">
+                                {{ "%.2f"|format(mat.total) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                <div style="margin-top: 20px; text-align: right;">
+                    <button type="submit" class="btn" style="font-size: 1.1em; padding: 10px 20px;">SAVE INVENTORY</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- What Can Be Made -->
+        <div class="section">
+            <h2>WHAT CAN BE MADE</h2>
+            <p style="color: #a0aec0; margin-bottom: 20px;">Based on your organization's total material inventory (across all grades), here are the blueprints you can craft.</p>
+            
+            {% if craftable_blueprints %}
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;">
+            <table style="margin-top: 0;">
+                <thead style="position: sticky; top: 0; background-color: var(--app-panel); z-index: 1; box-shadow: 0 2px 2px -1px rgba(0,0,0,0.4);">
+                    <tr>
+                        <th>Blueprint Name</th>
+                        <th>Category</th>
+                        <th>Max Craftable Quantity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bp in craftable_blueprints %}
+                    <tr>
+                        <td><strong>{{ bp.blueprint_name }}</strong></td>
+                        <td>{{ bp.category }}</td>
+                        <td style="color: #00ffd0; font-weight: bold; font-size: 1.2em;">{{ bp.max_craftable }}x</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div style="padding: 30px; text-align: center; background-color: #10141d; border-radius: 4px; border: 1px dashed #2d3d52;">
+                <p style="color: #ff6b6b; font-weight: bold; font-size: 1.1em;">Insufficient Materials</p>
+                <p style="color: #a0aec0;">You do not have enough materials to craft any known blueprints. Log more inventory above.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

@@ -167,6 +167,7 @@
         </div>
         <div class="header-links">
             <a href="/">← Back to Portal</a>
+            <a href="/org/{{ org.slug }}/materials" style="color: #00ffd0; border: 1px solid #00ffd0; padding: 5px 10px; border-radius: 4px;">MATERIAL INVENTORY</a>
             {% if user_role == 'Admin' %}
             <a href="/org/{{ org.slug }}/admin" class="admin-link">SYSTEM ADMIN</a>
             {% endif %}
@@ -338,14 +339,26 @@
                     <thead>
                         <tr>
                             <th>Material</th>
-                            <th>Total Cost</th>
+                            <th>Cost</th>
+                            <th>In Stock</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for mat in material_totals %}
                         <tr>
-                            <td><strong>{{ mat.name }}</strong></td>
+                            <td>
+                                <strong>{{ mat.name }}</strong>
+                                <div style="display: inline-block; margin-left: 8px; vertical-align: middle;">
+                                    <span title="Baseline (500Q)" style="display: inline-block; min-width: 16px; padding: 0 4px; height: 16px; line-height: 16px; background-color: #4a5568; border-radius: 8px; margin-right: 2px; font-size: 0.7em; text-align: center; color: #fff; font-weight: bold;">{{ "%g"|format(mat.breakdown.baseline) }}</span>
+                                    <span title="Improved (501Q-749Q)" style="display: inline-block; min-width: 16px; padding: 0 4px; height: 16px; line-height: 16px; background-color: #2b6cb0; border-radius: 8px; margin-right: 2px; font-size: 0.7em; text-align: center; color: #fff; font-weight: bold;">{{ "%g"|format(mat.breakdown.improved) }}</span>
+                                    <span title="High Quality (750Q-899Q)" style="display: inline-block; min-width: 16px; padding: 0 4px; height: 16px; line-height: 16px; background-color: #6b46c1; border-radius: 8px; margin-right: 2px; font-size: 0.7em; text-align: center; color: #fff; font-weight: bold;">{{ "%g"|format(mat.breakdown.high_quality) }}</span>
+                                    <span title="Exceptional (900Q-1000Q)" style="display: inline-block; min-width: 16px; padding: 0 4px; height: 16px; line-height: 16px; background-color: #c53030; border-radius: 8px; font-size: 0.7em; text-align: center; color: #fff; font-weight: bold;">{{ "%g"|format(mat.breakdown.exceptional) }}</span>
+                                </div>
+                            </td>
                             <td>{{ mat.amount }}</td>
+                            <td style="font-weight: bold; color: {% if mat.has_enough %}#00ffd0{% else %}#ff6b6b{% endif %};">
+                                {{ mat.available }}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
