@@ -5,3 +5,5 @@ Flask-WTF~=1.2.1
 Flask-APScheduler~=1.13.1
 selenium
 webdriver-manager
+pytest
+pytest-flask

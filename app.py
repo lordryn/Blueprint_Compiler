@@ -22,7 +22,8 @@ db.init_app(app)
 scheduler = APScheduler()
 scheduler.api_enabled = True
 scheduler.init_app(app)
-scheduler.start()
+if not os.environ.get('TESTING'):
+    scheduler.start()
 
 @scheduler.task('cron', id='update_catalog', hour='0', minute='0')
 def scheduled_catalog_update():
@@ -34,17 +35,18 @@ def scheduled_catalog_update():
         print(f"Scheduled update failed: {e}")
 
 # Database initialization wrapper
-with app.app_context():
-    db.create_all()
+if not os.environ.get('TESTING'):
+    with app.app_context():
+        db.create_all()
 
-    # Initialize basic Roles if empty
-    if Role.query.count() == 0:
-        admin_role = Role(name='Admin', description='Full control over membership, roles, and grabber')
-        manager_role = Role(name='Manager', description='Control claims and requisitions')
-        member_role = Role(name='Member', description='Standard user, can make claims and view lists')
-        viewer_role = Role(name='Viewer', description='Read-only observer')
-        db.session.add_all([admin_role, manager_role, member_role, viewer_role])
-        db.session.commit()
+        # Initialize basic Roles if empty
+        if Role.query.count() == 0:
+            admin_role = Role(name='Admin', description='Full control over membership, roles, and grabber')
+            manager_role = Role(name='Manager', description='Control claims and requisitions')
+            member_role = Role(name='Member', description='Standard user, can make claims and view lists')
+            viewer_role = Role(name='Viewer', description='Read-only observer')
+            db.session.add_all([admin_role, manager_role, member_role, viewer_role])
+            db.session.commit()
 
 
 # Helper function for password hashing
