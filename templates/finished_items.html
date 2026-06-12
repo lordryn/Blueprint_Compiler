@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ org.name }} Finished Items | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-panel-header: #242b3a;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+        }
+        .section {
+            background-color: var(--app-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--app-line);
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--app-line);
+            color: #000;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9em;
+            display: inline-block;
+        }
+        .alert {
+            background-color: rgba(0, 255, 208, 0.1);
+            border: 1px solid var(--app-line);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        input[type=number] {
+            width: 60px;
+            padding: 5px;
+            background-color: #10141d;
+            border: 1px solid var(--border-color);
+            color: var(--app-text);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    {% include 'nav.html' %}
+
+    <div style="margin-bottom: 40px;">
+        <h1 style="font-size: 2.2em; margin: 0; color: var(--app-line);">{{ org.name }} Finished Items</h1>
+        <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Inventory of completed manufacturing jobs</div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alert">
+          {% for category, message in messages %}
+            <div style="margin-bottom: 5px; {% if category == 'error' %}color: #ff6b6b;{% endif %}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="section">
+        <table>
+            <thead>
+                <tr>
+                    <th>Item Name</th>
+                    <th>Quantity Available</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>
+                        <strong>{{ item.blueprint_name }}</strong>
+                        {% if item.requisition_id %}
+                            <br><span style="color: #f6e05e; font-size: 0.85em;">Req #{{ item.requisition_id }}</span>
+                        {% endif %}
+                        {% if item.notes %}
+                            <div style="color: #a0aec0; font-size: 0.85em; font-style: italic;">"{{ item.notes }}"</div>
+                        {% endif %}
+                    </td>
+                    <td style="color: #00ffd0; font-weight: bold; font-size: 1.2em;">{{ item.quantity }}</td>
+                    <td>
+                        {% if user_role in ['Admin', 'Manager'] %}
+                            <form method="POST" action="/org/{{ org.slug }}/finished-items" style="display:inline; margin-right: 10px;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="item_id" value="{{ item.id }}"/>
+                                <input type="hidden" name="action" value="distribute"/>
+                                <input type="number" name="remove_qty" value="1" min="1" max="{{ item.quantity }}">
+                                <button type="submit" class="btn" style="background-color: #3b82f6; color: white;">Distribute</button>
+                            </form>
+                            <form method="POST" action="/org/{{ org.slug }}/finished-items" style="display:inline; margin-right: 10px;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="item_id" value="{{ item.id }}"/>
+                                <input type="hidden" name="action" value="requeue"/>
+                                <button type="submit" class="btn" style="background-color: #f6e05e; color: black;">Requeue</button>
+                            </form>
+                            <form method="POST" action="/org/{{ org.slug }}/finished-items" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="item_id" value="{{ item.id }}"/>
+                                <input type="hidden" name="action" value="remove"/>
+                                <input type="number" name="remove_qty" value="1" min="1" max="{{ item.quantity }}">
+                                <button type="submit" class="btn" style="background-color: #ff4d4d; color: white;">Remove</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" style="text-align:center; color:#a0aec0;">No finished items in inventory.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

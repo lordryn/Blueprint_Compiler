@@ -20,27 +20,6 @@
             margin: 0;
             padding: 40px;
         }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid var(--app-line);
-            padding-bottom: 20px;
-            margin-bottom: 40px;
-        }
-        h1 {
-            margin: 0;
-            color: var(--app-line);
-        }
-        .header-links a {
-            color: var(--app-text);
-            text-decoration: none;
-            margin-left: 20px;
-            font-weight: bold;
-        }
-        .header-links a:hover {
-            color: var(--app-line);
-        }
         .grid {
             display: grid;
             grid-template-columns: 1fr;
@@ -117,20 +96,17 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <div>
-            <h1 style="font-size: 2.2em;">{{ org.name }} Materials</h1>
-            <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Inventory & Crafting Availability</div>
-        </div>
-        <div class="header-links">
-            <a href="/org/{{ org.slug }}">← Back to Dashboard</a>
-        </div>
+    {% include 'nav.html' %}
+
+    <div style="margin-bottom: 40px;">
+        <h1 style="font-size: 2.2em; margin: 0; color: var(--app-line);">{{ org.name }} Material Inventory</h1>
+        <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Raw resource tracking and breakdown</div>
     </div>
 
-    {% with messages = get_flashed_messages() %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="alert">
-          {% for message in messages %}
+          {% for category, message in messages %}
             <div>{{ message }}</div>
           {% endfor %}
         </div>
@@ -209,6 +185,7 @@
                         <th>Blueprint Name</th>
                         <th>Category</th>
                         <th>Max Craftable Quantity</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -217,6 +194,9 @@
                         <td><strong>{{ bp.blueprint_name }}</strong></td>
                         <td>{{ bp.category }}</td>
                         <td style="color: #00ffd0; font-weight: bold; font-size: 1.2em;">{{ bp.max_craftable }}x</td>
+                        <td>
+                            <button class="btn" style="padding: 5px 10px; font-size: 0.9em;" onclick="openCraftModal('{{ bp.blueprint_name | replace("'", "\\'") }}')">CRAFT</button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -230,5 +210,103 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Crafting Modal -->
+    <div id="craftModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:100; align-items:center; justify-content:center;">
+        <div style="background:var(--app-panel); border:1px solid var(--border-color); border-radius:8px; padding:30px; width:500px; max-width:90%;">
+            <h2 id="craftModalTitle" style="margin-top:0;">Craft Item</h2>
+            <form id="craftForm" method="POST" action="/org/{{ org.slug }}/crafting/start">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="blueprint_name" id="craftBlueprintName" value=""/>
+                <input type="hidden" name="requisition_id" id="craftRequisitionId" value=""/>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Material Deduction Strategy</label>
+                    <select name="deduct_mode" id="deductMode" style="width:100%; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;" onchange="toggleManualInputs()">
+                        <option value="auto_lowest">Auto Deduct: Lowest Grade First</option>
+                        <option value="auto_highest">Auto Deduct: Highest Grade First</option>
+                        <option value="manual">Manual Allocation</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Notes / Instructions (Optional)</label>
+                    <textarea name="notes" id="craftNotes" rows="2" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;"></textarea>
+                </div>
+                
+                <div id="manualInputs" style="display:none; max-height:250px; overflow-y:auto; border:1px solid var(--border-color); padding:10px; margin-bottom:20px; background:#0d1117;">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" class="btn" style="background:#2d3d52; color:white;" onclick="closeCraftModal()">CANCEL</button>
+                    <button type="submit" class="btn">START CRAFTING</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const craftableBlueprints = {{ craftable_blueprints | tojson | safe if craftable_blueprints else '[]' }};
+        
+        function openCraftModal(bpName, requisitionId = '') {
+            document.getElementById('craftBlueprintName').value = bpName;
+            document.getElementById('craftRequisitionId').value = requisitionId;
+            document.getElementById('craftModalTitle').innerText = (requisitionId ? 'Fulfill Requisition: ' : 'Craft ') + bpName;
+            document.getElementById('craftModal').style.display = 'flex';
+            
+            const bp = craftableBlueprints.find(b => b.blueprint_name === bpName);
+            const manualDiv = document.getElementById('manualInputs');
+            manualDiv.innerHTML = '<p style="color:#a0aec0; font-size:0.9em; margin-top:0;">Specify how much of each grade to use for each material:</p>';
+            
+            if (bp && bp.materials) {
+                bp.materials.forEach(mat => {
+                    const match = mat.amount ? mat.amount.toString().match(/^([\d.]+)/) : null;
+                    const reqAmt = match ? parseFloat(match[1]) : 0;
+                    if (reqAmt > 0) {
+                        manualDiv.innerHTML += `
+                            <div style="margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid #1a1f29;">
+                                <strong style="color:var(--app-line);">${mat.name} (Need ${reqAmt})</strong>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:5px;">
+                                    <div>
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-baseline">500Q</span></label>
+                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_baseline" value="0" style="width:100%;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-improved">501-749</span></label>
+                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_improved" value="0" style="width:100%;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-highquality">750-899</span></label>
+                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_highquality" value="0" style="width:100%;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-exceptional">900+</span></label>
+                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_exceptional" value="0" style="width:100%;">
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            }
+            toggleManualInputs();
+        }
+        
+        function closeCraftModal() {
+            document.getElementById('craftModal').style.display = 'none';
+        }
+        
+        function toggleManualInputs() {
+            const mode = document.getElementById('deductMode').value;
+            document.getElementById('manualInputs').style.display = (mode === 'manual') ? 'block' : 'none';
+        }
+        
+        {% if request.args.get('requeue_bp') %}
+        setTimeout(() => {
+            openCraftModal('{{ request.args.get("requeue_bp") | replace("'", "\\'") }}', '{{ request.args.get("requeue_req", "") }}');
+        }, 500);
+        {% endif %}
+    </script>
 </body>
 </html>

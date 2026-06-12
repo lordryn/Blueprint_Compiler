@@ -8,9 +8,11 @@ from flask import Flask, render_template, request, redirect, url_for, session, a
 from flask_wtf.csrf import CSRFProtect
 from flask_apscheduler import APScheduler
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, User, Organization, Role, UserOrganizationRole, Claim, Requisition, JoinRequest, MaterialInventory
+from models import db, User, Organization, Role, UserOrganizationRole, Claim, Requisition, JoinRequest, MaterialInventory, CraftingJob, FinishedItem
 from bp_catalog_grabber import pull_fabricator_blueprints
 from blueprint_parser import process_blueprints
+import datetime
+from datetime import timedelta
 
 app = Flask(__name__)
 # Use a static fallback for development, but in production this should be set via env
@@ -67,6 +69,60 @@ def scheduled_catalog_update():
         app.logger.info("Scheduled catalog update completed successfully")
     except Exception as e:
         app.logger.error(f"Scheduled update failed: {e}")
+
+def parse_crafting_time(time_str):
+    if not time_str:
+        return timedelta()
+    
+    time_str = str(time_str).lower().strip()
+    total_seconds = 0
+    
+    matches = re.finditer(r'([\d.]+)\s*([hms])', time_str)
+    found_any = False
+    for match in matches:
+        found_any = True
+        val = float(match.group(1))
+        unit = match.group(2)
+        if unit == 'h':
+            total_seconds += val * 3600
+        elif unit == 'm':
+            total_seconds += val * 60
+        elif unit == 's':
+            total_seconds += val
+            
+    if not found_any:
+        try:
+            total_seconds = float(time_str)
+        except ValueError:
+            pass
+            
+    return timedelta(seconds=total_seconds)
+
+@scheduler.task('interval', id='process_crafting_jobs', seconds=10)
+def process_crafting_jobs():
+    with app.app_context():
+        now = datetime.datetime.utcnow()
+        jobs = CraftingJob.query.filter(CraftingJob.status == 'In Progress', CraftingJob.completion_time <= now).all()
+        for job in jobs:
+            job.status = 'Completed'
+            
+            existing = None
+            if not job.requisition_id:
+                existing = FinishedItem.query.filter_by(
+                    organization_id=job.organization_id,
+                    blueprint_name=job.blueprint_name,
+                    requisition_id=None
+                ).first()
+                
+            if existing:
+                existing.quantity += 1
+            else:
+                fi = FinishedItem(organization_id=job.organization_id, blueprint_name=job.blueprint_name, requisition_id=job.requisition_id, notes=job.notes)
+                db.session.add(fi)
+        
+        if jobs:
+            db.session.commit()
+            app.logger.info(f"Processed {len(jobs)} completed crafting jobs")
 
 # Database initialization wrapper
 if not os.environ.get('TESTING'):
@@ -516,18 +572,29 @@ def submit_requisition(org_slug):
     org = Organization.query.filter_by(slug=org_slug).first_or_404()
     blueprint_name = request.form.get('blueprint_name')
     qty = int(request.form.get('quantity', 1))
+    notes = request.form.get('notes', '').strip()
 
     new_req = Requisition(
         user_id=session['user_id'],
         organization_id=org.id,
         blueprint_name=blueprint_name,
-        quantity=qty
+        quantity=qty,
+        notes=notes
     )
     db.session.add(new_req)
     db.session.commit()
     flash("Requisition submitted to organization crafters.", "success")
-    return redirect(url_for('organization_dashboard', org_slug=org_slug))
+    return redirect(url_for('requisitions_page', org_slug=org_slug))
 
+@app.route('/org/<org_slug>/requisitions', methods=['GET'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def requisitions_page(org_slug):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    requisitions = Requisition.query.filter_by(organization_id=org.id).order_by(Requisition.status, Requisition.created_at.desc()).all()
+    user_role = UserOrganizationRole.query.filter_by(user_id=session['user_id'], organization_id=org.id).first()
+    blueprints = load_blueprint_catalog()
+    return render_template('requisitions.html', org=org, requisitions=requisitions, user_role=user_role.role.name if user_role else 'Viewer', blueprints=blueprints)
 
 @app.route('/org/<org_slug>/claim/<int:claim_id>/delete', methods=['POST'])
 @login_required
@@ -863,6 +930,254 @@ def site_admin_parse_catalog():
         flash(f"Parser pipeline exception: {str(e)}", "error")
     return redirect(url_for('site_admin'))
 
+
+# --- Crafting Queue & Finished Items ---
+
+@app.route('/org/<org_slug>/crafting', methods=['GET'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def crafting_queue(org_slug):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    jobs = CraftingJob.query.filter_by(organization_id=org.id).order_by(CraftingJob.status.desc(), CraftingJob.completion_time.asc()).all()
+    user_role = UserOrganizationRole.query.filter_by(user_id=session['user_id'], organization_id=org.id).first()
+    return render_template('crafting.html', org=org, jobs=jobs, user_role=user_role.role.name if user_role else 'Viewer')
+
+@app.route('/org/<org_slug>/crafting/start', methods=['POST'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def start_crafting(org_slug):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    bp_name = request.form.get('blueprint_name')
+    deduct_mode = request.form.get('deduct_mode') # 'auto_lowest', 'auto_highest', 'manual'
+    requisition_id = request.form.get('requisition_id')
+    notes = request.form.get('notes', '').strip()
+    
+    blueprints = load_blueprint_catalog()
+    bp = next((b for b in blueprints if b['blueprint_name'] == bp_name), None)
+    if not bp:
+        flash("Blueprint not found.", "error")
+        return redirect(url_for('organization_materials', org_slug=org_slug))
+        
+    required_materials = bp.get('materials', [])
+    crafting_time_str = bp.get('crafting_time', '0s')
+    
+    parsed_reqs = []
+    for mat in required_materials:
+        amt_str = str(mat.get('amount', '0')).strip()
+        match = re.match(r"^([\d.]+)\s*(.*)$", amt_str)
+        val = float(match.group(1)) if match else 0.0
+        parsed_reqs.append({
+            'name': mat.get('name'),
+            'amount': val
+        })
+        
+    inventory_dict = {inv.material_name: inv for inv in MaterialInventory.query.filter_by(organization_id=org.id).all()}
+    deduction_log = {}
+    
+    for req in parsed_reqs:
+        mat_name = req['name']
+        req_amt = req['amount']
+        if req_amt <= 0: continue
+        
+        inv = inventory_dict.get(mat_name)
+        if not inv:
+            flash(f"Missing material: {mat_name}", "error")
+            return redirect(url_for('organization_materials', org_slug=org_slug))
+            
+        total_avail = inv.grade_baseline + inv.grade_improved + inv.grade_high_quality + inv.grade_exceptional
+        if total_avail < req_amt:
+            flash(f"Not enough {mat_name}. Need {req_amt}, have {total_avail}.", "error")
+            return redirect(url_for('organization_materials', org_slug=org_slug))
+            
+    grades_lowest_first = ['grade_baseline', 'grade_improved', 'grade_high_quality', 'grade_exceptional']
+    grades_highest_first = ['grade_exceptional', 'grade_high_quality', 'grade_improved', 'grade_baseline']
+    
+    for req in parsed_reqs:
+        mat_name = req['name']
+        req_amt = req['amount']
+        if req_amt <= 0: continue
+        
+        inv = inventory_dict[mat_name]
+        deduction_log[mat_name] = {'baseline': 0, 'improved': 0, 'high_quality': 0, 'exceptional': 0}
+        
+        if deduct_mode == 'manual':
+            for grade in ['baseline', 'improved', 'high_quality', 'exceptional']:
+                key = f"mat_{mat_name}_{grade}"
+                try:
+                    val = float(request.form.get(key, 0))
+                except ValueError:
+                    val = 0.0
+                if val > 0:
+                    current_grade_val = getattr(inv, f"grade_{grade}")
+                    if current_grade_val < val:
+                        flash(f"Manual deduction error: Not enough {grade} grade {mat_name}.", "error")
+                        db.session.rollback()
+                        return redirect(url_for('organization_materials', org_slug=org_slug))
+                    setattr(inv, f"grade_{grade}", current_grade_val - val)
+                    deduction_log[mat_name][grade] += val
+                    req_amt -= val
+            if req_amt > 0.0001: 
+                flash(f"Manual deduction error: You didn't allocate enough {mat_name}.", "error")
+                db.session.rollback()
+                return redirect(url_for('organization_materials', org_slug=org_slug))
+        else:
+            grades_to_use = grades_lowest_first if deduct_mode == 'auto_lowest' else grades_highest_first
+            for grade_col in grades_to_use:
+                if req_amt <= 0: break
+                avail = getattr(inv, grade_col)
+                if avail > 0:
+                    take = min(avail, req_amt)
+                    setattr(inv, grade_col, avail - take)
+                    req_amt -= take
+                    grade_key = grade_col.replace('grade_', '')
+                    deduction_log[mat_name][grade_key] += take
+                    
+    time_delta = parse_crafting_time(crafting_time_str)
+    now = datetime.datetime.utcnow()
+    
+    if requisition_id:
+        req = Requisition.query.filter_by(id=requisition_id, organization_id=org.id).first()
+        if req:
+            req.status = 'In Progress'
+            req.crafter_id = session.get('user_id')
+            if not notes: notes = req.notes # Carry over notes if none provided
+    
+    job = CraftingJob(
+        organization_id=org.id,
+        user_id=session.get('user_id'),
+        requisition_id=requisition_id if requisition_id else None,
+        notes=notes,
+        blueprint_name=bp_name,
+        status='In Progress',
+        start_time=now,
+        completion_time=now + time_delta,
+        deduction_data=json.dumps(deduction_log)
+    )
+    db.session.add(job)
+    db.session.commit()
+    
+    flash(f"Started crafting {bp_name}.", "success")
+    return redirect(url_for('crafting_queue', org_slug=org_slug))
+
+@app.route('/org/<org_slug>/crafting/edit/<int:job_id>', methods=['POST'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def edit_crafting_job(org_slug, job_id):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    job = CraftingJob.query.filter_by(id=job_id, organization_id=org.id).first_or_404()
+    user_role = UserOrganizationRole.query.filter_by(user_id=session['user_id'], organization_id=org.id).first()
+    
+    # Permission check for destructive actions
+    if request.form.get('action') in ['cancel', 'complete', 'adjust_time'] and user_role.role.name not in ['Admin', 'Manager']:
+        abort(403)
+    
+    action = request.form.get('action')
+    if action == 'cancel':
+        if job.status == 'In Progress':
+            if job.deduction_data:
+                try:
+                    deductions = json.loads(job.deduction_data)
+                    for mat_name, grades in deductions.items():
+                        inv = MaterialInventory.query.filter_by(organization_id=org.id, material_name=mat_name).first()
+                        if inv:
+                            inv.grade_baseline += grades.get('baseline', 0)
+                            inv.grade_improved += grades.get('improved', 0)
+                            inv.grade_high_quality += grades.get('high_quality', 0)
+                            inv.grade_exceptional += grades.get('exceptional', 0)
+                except Exception as e:
+                    app.logger.error(f"Failed to refund materials for job {job.id}: {e}")
+            job.status = 'Cancelled'
+            if job.requisition_id:
+                req = Requisition.query.get(job.requisition_id)
+                if req:
+                    req.status = 'Pending'
+                    req.crafter_id = None
+            flash("Job cancelled and materials refunded.", "warning")
+            
+    elif action == 'complete':
+        if job.status == 'In Progress':
+            job.status = 'Completed'
+            job.completion_time = datetime.datetime.utcnow()
+            
+            existing = None
+            if not job.requisition_id:
+                existing = FinishedItem.query.filter_by(organization_id=org.id, blueprint_name=job.blueprint_name, requisition_id=None).first()
+                
+            if existing:
+                existing.quantity += 1
+            else:
+                fi = FinishedItem(organization_id=org.id, blueprint_name=job.blueprint_name, requisition_id=job.requisition_id, notes=job.notes)
+                db.session.add(fi)
+            flash("Job marked as completed early.", "success")
+            
+    elif action == 'adjust_time':
+        if job.status == 'In Progress':
+            try:
+                minutes = int(request.form.get('minutes', 0))
+                job.completion_time += timedelta(minutes=minutes)
+                flash(f"Adjusted timer by {minutes} minutes.", "success")
+            except ValueError:
+                pass
+                
+    elif action == 'edit_details':
+        if job.user_id == session.get('user_id') or user_role.role.name == 'Admin':
+            job.notes = request.form.get('notes', '').strip()
+            new_bp = request.form.get('blueprint_name')
+            if new_bp:
+                job.blueprint_name = new_bp
+            flash("Job details updated.", "success")
+        else:
+            flash("You don't have permission to edit this job.", "error")
+                
+    db.session.commit()
+    return redirect(url_for('crafting_queue', org_slug=org_slug))
+
+@app.route('/org/<org_slug>/finished-items', methods=['GET', 'POST'])
+@login_required
+@organization_role_required(['Admin', 'Manager', 'Member'])
+def finished_items(org_slug):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    user_role = UserOrganizationRole.query.filter_by(user_id=session['user_id'], organization_id=org.id).first()
+    
+    if request.method == 'POST':
+        if user_role.role.name == 'Member':
+            abort(403)
+        item_id = request.form.get('item_id')
+        qty_to_remove = int(request.form.get('remove_qty', 1))
+        item = FinishedItem.query.filter_by(id=item_id, organization_id=org.id).first_or_404()
+        
+        action = request.form.get('action', 'remove')
+        
+        if action == 'distribute':
+            if item.requisition_id:
+                req = Requisition.query.get(item.requisition_id)
+                if req:
+                    req.status = 'Fulfilled'
+            if item.quantity > qty_to_remove:
+                item.quantity -= qty_to_remove
+                flash(f"Distributed {qty_to_remove} of {item.blueprint_name}.", "success")
+            else:
+                db.session.delete(item)
+                flash(f"Distributed all of {item.blueprint_name}.", "success")
+        elif action == 'requeue':
+            # They want to requeue this. Pass the item details back to materials to re-select
+            db.session.delete(item)
+            db.session.commit()
+            flash("Item removed from Finished queue. Please re-craft it.", "info")
+            return redirect(url_for('organization_materials', org_slug=org_slug, requeue_bp=item.blueprint_name, requeue_req=item.requisition_id))
+        else: # remove
+            if qty_to_remove >= item.quantity:
+                db.session.delete(item)
+                flash(f"Removed all of {item.blueprint_name}.", "success")
+            else:
+                item.quantity -= qty_to_remove
+                flash(f"Removed {qty_to_remove} of {item.blueprint_name}.", "success")
+                
+        db.session.commit()
+        return redirect(url_for('finished_items', org_slug=org_slug))
+        
+    items = FinishedItem.query.filter_by(organization_id=org.id).order_by(FinishedItem.created_at.desc()).all()
+    return render_template('finished_items.html', org=org, items=items, user_role=user_role.role.name)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

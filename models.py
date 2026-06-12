@@ -108,11 +108,14 @@ class Requisition(db.Model):
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
     blueprint_name = db.Column(db.String(250), nullable=False)
     quantity = db.Column(db.Integer, default=1)
-    status = db.Column(db.String(20), default='Pending')  # 'Pending', 'Fulfilled', 'Cancelled'
+    status = db.Column(db.String(20), default='Pending')  # 'Pending', 'In Progress', 'Fulfilled', 'Cancelled'
+    notes = db.Column(db.Text, nullable=True)
+    crafter_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     
     # Relationships
-    user = db.relationship('User', back_populates='requisitions')
+    user = db.relationship('User', foreign_keys=[user_id], back_populates='requisitions')
+    crafter = db.relationship('User', foreign_keys=[crafter_id])
     organization = db.relationship('Organization', back_populates='requisitions')
 
     def __repr__(self):
@@ -158,3 +161,52 @@ class MaterialInventory(db.Model):
 
     def __repr__(self):
         return f"<MaterialInventory Org:{self.organization_id} Material:{self.material_name}>"
+
+
+class CraftingJob(db.Model):
+    """
+    Tracks an active crafting job, acting as a background timer.
+    """
+    __tablename__ = 'crafting_jobs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    requisition_id = db.Column(db.Integer, db.ForeignKey('requisitions.id', ondelete='SET NULL'), nullable=True)
+    blueprint_name = db.Column(db.String(250), nullable=False)
+    status = db.Column(db.String(50), default='In Progress')  # 'In Progress', 'Completed', 'Cancelled'
+    notes = db.Column(db.Text, nullable=True)
+    start_time = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    completion_time = db.Column(db.DateTime, nullable=False)
+    
+    # Store JSON string of what materials were deducted for easy refunding if cancelled
+    deduction_data = db.Column(db.Text, nullable=True)
+    
+    organization = db.relationship('Organization', backref=db.backref('crafting_jobs', lazy=True, cascade="all, delete-orphan"))
+    user = db.relationship('User', backref=db.backref('crafting_jobs', lazy=True))
+    requisition = db.relationship('Requisition', backref=db.backref('crafting_jobs', lazy=True))
+
+    def __repr__(self):
+        return f"<CraftingJob ID:{self.id} Org:{self.organization_id} BP:{self.blueprint_name} Status:{self.status}>"
+
+
+class FinishedItem(db.Model):
+    """
+    Inventory for completed items.
+    """
+    __tablename__ = 'finished_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+    requisition_id = db.Column(db.Integer, db.ForeignKey('requisitions.id', ondelete='SET NULL'), nullable=True)
+    blueprint_name = db.Column(db.String(250), nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+    location = db.Column(db.String(250), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    
+    organization = db.relationship('Organization', backref=db.backref('finished_items', lazy=True, cascade="all, delete-orphan"))
+    requisition = db.relationship('Requisition', backref=db.backref('finished_items', lazy=True))
+
+    def __repr__(self):
+        return f"<FinishedItem Org:{self.organization_id} Item:{self.blueprint_name} Qty:{self.quantity}>"

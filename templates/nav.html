@@ -1,0 +1,78 @@
+    <style>
+        .org-nav {
+            display: flex;
+            background-color: var(--app-panel);
+            border-bottom: 2px solid var(--app-line);
+            padding: 0 40px;
+            margin: -40px -40px 40px -40px; /* Offset body padding */
+            align-items: center;
+            height: 60px;
+        }
+        .org-nav-brand {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: var(--app-line);
+            margin-right: 30px;
+            text-decoration: none;
+        }
+        .org-nav-links {
+            display: flex;
+            gap: 5px;
+            height: 100%;
+        }
+        .org-nav-link {
+            color: var(--app-text);
+            text-decoration: none;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .org-nav-link:hover {
+            background-color: rgba(0, 255, 208, 0.05);
+            color: var(--app-line);
+        }
+        .org-nav-link.active {
+            color: var(--app-line);
+            border-bottom: 3px solid var(--app-line);
+            background-color: rgba(0, 255, 208, 0.1);
+        }
+        .org-nav-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .org-nav-btn {
+            border: 1px solid var(--app-line);
+            color: var(--app-line);
+            padding: 5px 10px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .org-nav-btn:hover {
+            background-color: var(--app-line);
+            color: #000;
+        }
+    </style>
+
+    <div class="org-nav">
+        <a href="/org/{{ org.slug }}" class="org-nav-brand">{{ org.name }}</a>
+        <div class="org-nav-links">
+            <a href="/org/{{ org.slug }}" class="org-nav-link {% if request.path == '/org/' + org.slug %}active{% endif %}">DASHBOARD</a>
+            <a href="/org/{{ org.slug }}/requisitions" class="org-nav-link {% if request.path == '/org/' + org.slug + '/requisitions' %}active{% endif %}">REQUISITIONS</a>
+            <a href="/org/{{ org.slug }}/materials" class="org-nav-link {% if request.path == '/org/' + org.slug + '/materials' %}active{% endif %}">MATERIALS</a>
+            <a href="/org/{{ org.slug }}/crafting" class="org-nav-link {% if request.path == '/org/' + org.slug + '/crafting' %}active{% endif %}">QUEUE</a>
+            <a href="/org/{{ org.slug }}/finished-items" class="org-nav-link {% if request.path == '/org/' + org.slug + '/finished-items' %}active{% endif %}">FINISHED</a>
+        </div>
+        <div class="org-nav-right">
+            {% if user_role == 'Admin' %}
+            <a href="/org/{{ org.slug }}/admin" class="org-nav-btn">ADMIN</a>
+            {% endif %}
+            <a href="/logout" style="color: #ff6b6b; text-decoration: none; font-weight: bold;">Logout</a>
+            <a href="/" style="color: #a0aec0; text-decoration: none; font-size: 0.9em;">Portal</a>
+        </div>
+    </div>

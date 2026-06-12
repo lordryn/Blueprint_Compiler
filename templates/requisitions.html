@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ org.name }} Requisitions | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-panel-header: #242b3a;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+        .section {
+            background-color: var(--app-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--app-line);
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--app-line);
+            color: #000;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9em;
+            display: inline-block;
+        }
+        .btn-danger {
+            background-color: #ff4d4d;
+            color: #fff;
+        }
+        .alert {
+            background-color: rgba(0, 255, 208, 0.1);
+            border: 1px solid var(--app-line);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .material-tag {
+            background-color: #1a2333;
+            border: 1px solid #2d3d52;
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin: 2px;
+            display: inline-block;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    {% include 'nav.html' %}
+
+    <div style="margin-bottom: 40px;">
+        <h1 style="font-size: 2.2em; margin: 0; color: var(--app-line);">{{ org.name }} Requisitions</h1>
+        <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Member requests and crafting fulfillment</div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alert">
+          {% for category, message in messages %}
+            <div style="margin-bottom: 5px; {% if category == 'error' %}color: #ff6b6b;{% endif %}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: var(--app-line);">ACTIVE REQUESTS</h2>
+            <button class="btn" style="background-color: #3b82f6; color: white;" onclick="document.getElementById('newReqModal').style.display='flex'">+ NEW REQUISITION</button>
+        </div>
+
+        {% if requisitions %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Requested Item</th>
+                    <th>Qty</th>
+                    <th>Requested By</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in requisitions %}
+                <tr>
+                    <td>
+                        <strong>{{ req.blueprint_name }}</strong>
+                        {% if req.notes %}
+                            <div style="color: #a0aec0; font-size: 0.85em; font-style: italic; margin-top: 5px;">"{{ req.notes }}"</div>
+                        {% endif %}
+                    </td>
+                    <td style="font-weight: bold; color: #00ffd0;">{{ req.quantity }}</td>
+                    <td>{{ req.user.username }}</td>
+                    <td>
+                        {% if req.status == 'Pending' %}
+                            <span style="color: #a0aec0;">Pending</span>
+                        {% elif req.status == 'In Progress' %}
+                            <span style="color: #f6e05e;">In Progress by {{ req.crafter.username if req.crafter else 'Crafter' }}</span>
+                        {% elif req.status == 'Fulfilled' %}
+                            <span style="color: #00ffd0;">Fulfilled</span>
+                        {% else %}
+                            {{ req.status }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if req.status == 'Pending' and user_role in ['Admin', 'Manager', 'Member'] %}
+                            <a href="/org/{{ org.slug }}/materials?requeue_bp={{ req.blueprint_name | urlencode }}&requeue_req={{ req.id }}" class="btn" style="background-color: #f6e05e; color: black; margin-right: 5px;">CRAFT</a>
+                        {% endif %}
+                        
+                        {% if req.user_id == session.user_id or user_role == 'Admin' %}
+                            {% if req.status != 'In Progress' %}
+                            <form action="/org/{{ org.slug }}/requisition/{{ req.id }}/delete" method="POST" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8em;" onclick="return confirm('Remove this request?')">REMOVE</button>
+                            </form>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #a0aec0; text-align: center;">No active requisitions at this time. All units fully provisioned.</p>
+        {% endif %}
+    </div>
+
+    <!-- New Requisition Modal -->
+    <div id="newReqModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:100; align-items:center; justify-content:center;">
+        <div style="background:var(--app-panel); border:1px solid var(--border-color); border-radius:8px; padding:30px; width:500px; max-width:90%;">
+            <h2 style="margin-top:0;">Request Item</h2>
+            <form id="newReqForm" method="POST" action="/org/{{ org.slug }}/requisition">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Blueprint Name</label>
+                    <input type="text" name="blueprint_name" required placeholder="e.g. Type-3 Multitool" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;">
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Quantity</label>
+                    <input type="number" name="quantity" required min="1" value="1" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;">
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Notes / Why do you need it? (Optional)</label>
+                    <textarea name="notes" rows="3" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;"></textarea>
+                </div>
+                
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" class="btn" style="background:#2d3d52; color:white;" onclick="document.getElementById('newReqModal').style.display='none'">CANCEL</button>
+                    <button type="submit" class="btn">SUBMIT REQUEST</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

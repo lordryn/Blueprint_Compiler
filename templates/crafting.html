@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ org.name }} Crafting Queue | Blueprint Compiler</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        :root {
+            --app-panel: #1a1f29;
+            --app-panel-header: #242b3a;
+            --app-line: #00ffd0;
+            --app-text: #e1e7f0;
+            --bg-color: #0d1117;
+            --border-color: #2a3342;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--app-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+        }
+        .section {
+            background-color: var(--app-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            color: var(--app-line);
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--app-line);
+            color: #000;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9em;
+            display: inline-block;
+        }
+        .btn-danger {
+            background-color: #ff4d4d;
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background-color: #cc0000;
+        }
+        .alert {
+            background-color: rgba(0, 255, 208, 0.1);
+            border: 1px solid var(--app-line);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .status-inprogress { color: #f6e05e; font-weight: bold; }
+        .status-completed { color: #00ffd0; font-weight: bold; }
+        .status-cancelled { color: #fc8181; font-weight: bold; }
+    </style>
+</head>
+<body>
+    {% include 'nav.html' %}
+
+    <div style="margin-bottom: 40px;">
+        <h1 style="font-size: 2.2em; margin: 0; color: var(--app-line);">{{ org.name }} Crafting Queue</h1>
+        <div style="font-size: 0.9em; color: #a0aec0; margin-top: 5px;">Active and completed manufacturing jobs</div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alert">
+          {% for category, message in messages %}
+            <div style="margin-bottom: 5px; {% if category == 'error' %}color: #ff6b6b;{% endif %}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="section">
+        <table id="jobsTable">
+            <thead>
+                <tr>
+                    <th>Blueprint</th>
+                    <th>Status</th>
+                    <th>Time Remaining</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr data-status="{{ job.status }}" data-completion="{{ job.completion_time.isoformat() }}Z">
+                    <td>
+                        <strong>{{ job.blueprint_name }}</strong>
+                        {% if job.requisition_id %}
+                            <br><span style="color: #f6e05e; font-size: 0.85em;">Req #{{ job.requisition_id }}</span>
+                        {% endif %}
+                        {% if job.notes %}
+                            <div style="color: #a0aec0; font-size: 0.85em; font-style: italic;">"{{ job.notes }}"</div>
+                        {% endif %}
+                    </td>
+                    <td class="status-{{ job.status|lower|replace(' ', '') }}">{{ job.status }}</td>
+                    <td class="countdown-cell" style="font-family: monospace; font-size: 1.2em;">
+                        {% if job.status == 'In Progress' %}
+                            Calculating...
+                        {% else %}
+                            --
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if job.status == 'In Progress' and user_role in ['Admin', 'Manager'] %}
+                            <form method="POST" action="/org/{{ org.slug }}/crafting/edit/{{ job.id }}" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="action" value="complete"/>
+                                <button type="submit" class="btn" title="Complete Early">Complete</button>
+                            </form>
+                            <form method="POST" action="/org/{{ org.slug }}/crafting/edit/{{ job.id }}" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="action" value="cancel"/>
+                                <button type="submit" class="btn btn-danger" onclick="return confirm('Cancel this job and refund materials?')">Cancel</button>
+                            </form>
+                        {% endif %}
+                        {% if job.user_id == session.user_id or user_role == 'Admin' %}
+                            <button type="button" class="btn" style="background:#4a5568; color:white; margin-top:5px;" onclick="openEditModal('{{ job.id }}', '{{ job.blueprint_name | replace("'", "\\'") }}', '{{ job.notes | replace("'", "\\'") if job.notes else "" }}')">Edit Details</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align:center; color:#a0aec0;">No crafting jobs in queue.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Edit Details Modal -->
+    <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:100; align-items:center; justify-content:center;">
+        <div style="background:var(--app-panel); border:1px solid var(--border-color); border-radius:8px; padding:30px; width:500px; max-width:90%;">
+            <h2 style="margin-top:0;">Edit Job Details</h2>
+            <form id="editForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="action" value="edit_details"/>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Blueprint Name</label>
+                    <input type="text" name="blueprint_name" id="editBlueprintName" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;">
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Notes / Instructions</label>
+                    <textarea name="notes" id="editNotes" rows="3" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;"></textarea>
+                </div>
+                
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" class="btn" style="background:#2d3d52; color:white;" onclick="closeEditModal()">CANCEL</button>
+                    <button type="submit" class="btn">SAVE CHANGES</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openEditModal(jobId, bpName, notes) {
+            document.getElementById('editForm').action = "/org/{{ org.slug }}/crafting/edit/" + jobId;
+            document.getElementById('editBlueprintName').value = bpName;
+            document.getElementById('editNotes').value = notes;
+            document.getElementById('editModal').style.display = 'flex';
+        }
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function updateCountdowns() {
+            const now = new Date();
+            const rows = document.querySelectorAll('#jobsTable tbody tr');
+            
+            rows.forEach(row => {
+                const status = row.getAttribute('data-status');
+                if (status !== 'In Progress') return;
+                
+                const completionStr = row.getAttribute('data-completion');
+                const completionTime = new Date(completionStr);
+                const cell = row.querySelector('.countdown-cell');
+                
+                const diff = completionTime - now;
+                if (diff <= 0) {
+                    cell.innerHTML = '<span style="color:#00ffd0">Finishing...</span>';
+                    // Auto reload if a job finished
+                    if (!window.reloading) {
+                        window.reloading = true;
+                        setTimeout(() => location.reload(), 2000);
+                    }
+                    return;
+                }
+                
+                const totalSeconds = Math.floor(diff / 1000);
+                const h = Math.floor(totalSeconds / 3600);
+                const m = Math.floor((totalSeconds % 3600) / 60);
+                const s = totalSeconds % 60;
+                
+                let display = '';
+                if (h > 0) display += h + 'h ';
+                if (m > 0 || h > 0) display += m + 'm ';
+                display += s + 's';
+                
+                cell.innerText = display;
+            });
+        }
+        
+        setInterval(updateCountdowns, 1000);
+        updateCountdowns();
+    </script>
+</body>
+</html>
