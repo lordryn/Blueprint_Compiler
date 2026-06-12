@@ -574,6 +574,7 @@ def organization_materials(org_slug):
     org = Organization.query.filter_by(slug=org_slug).first_or_404()
     
     if request.method == 'POST':
+        inv_map = {}
         for key, value in request.form.items():
             if key.startswith('mat_'):
                 parts = key.split('_')
@@ -586,18 +587,28 @@ def organization_materials(org_slug):
                     except ValueError:
                         continue
                         
-                    inv = MaterialInventory.query.filter_by(organization_id=org.id, material_name=material_name).first()
-                    if not inv:
-                        inv = MaterialInventory(organization_id=org.id, material_name=material_name)
-                        db.session.add(inv)
+                    if material_name not in inv_map:
+                        inv = MaterialInventory.query.filter_by(organization_id=org.id, material_name=material_name).first()
+                        if not inv:
+                            inv = MaterialInventory(organization_id=org.id, material_name=material_name)
+                            db.session.add(inv)
+                        inv_map[material_name] = inv
+                    else:
+                        inv = inv_map[material_name]
                         
-                    if grade == 'baseline':
+                    import math
+                    def floats_differ(f1, f2):
+                        if f1 is None: f1 = 0.0
+                        if f2 is None: f2 = 0.0
+                        return not math.isclose(float(f1), float(f2), abs_tol=1e-5)
+
+                    if grade == 'baseline' and floats_differ(inv.grade_baseline, val):
                         inv.grade_baseline = val
-                    elif grade == 'improved':
+                    elif grade == 'improved' and floats_differ(inv.grade_improved, val):
                         inv.grade_improved = val
-                    elif grade == 'highquality':
+                    elif grade == 'highquality' and floats_differ(inv.grade_high_quality, val):
                         inv.grade_high_quality = val
-                    elif grade == 'exceptional':
+                    elif grade == 'exceptional' and floats_differ(inv.grade_exceptional, val):
                         inv.grade_exceptional = val
                         
         db.session.commit()
