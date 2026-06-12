@@ -1,6 +1,9 @@
 import os
 import json
 import re
+import logging
+from logging.handlers import RotatingFileHandler
+from sqlalchemy import event
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash, jsonify
 from flask_wtf.csrf import CSRFProtect
 from flask_apscheduler import APScheduler
@@ -17,6 +20,36 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 csrf = CSRFProtect(app)
 db.init_app(app)
+# Logging setup
+if not os.environ.get('TESTING'):
+    file_handler = RotatingFileHandler('app.log', maxBytes=1024 * 1024 * 10, backupCount=5)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Blueprint Compiler startup')
+
+from flask import has_request_context
+
+@event.listens_for(db.session, "after_flush")
+def receive_after_flush(session_db, flush_context):
+    if os.environ.get('TESTING'):
+        return
+        
+    actor = "System"
+    if has_request_context() and 'username' in session:
+        actor = f"User:{session['username']}"
+        if request.view_args and 'org_slug' in request.view_args:
+            actor += f" Org:{request.view_args['org_slug']}"
+            
+    for obj in session_db.new:
+        app.logger.info(f"[{actor}] DB INSERT: {repr(obj)}")
+    for obj in session_db.dirty:
+        app.logger.info(f"[{actor}] DB UPDATE: {repr(obj)}")
+    for obj in session_db.deleted:
+        app.logger.info(f"[{actor}] DB DELETE: {repr(obj)}")
 
 # Scheduler setup
 scheduler = APScheduler()
@@ -31,8 +64,9 @@ def scheduled_catalog_update():
     try:
         pull_fabricator_blueprints()
         process_blueprints('blueprints unprocessed.txt', 'blueprints.json')
+        app.logger.info("Scheduled catalog update completed successfully")
     except Exception as e:
-        print(f"Scheduled update failed: {e}")
+        app.logger.error(f"Scheduled update failed: {e}")
 
 # Database initialization wrapper
 if not os.environ.get('TESTING'):
@@ -59,6 +93,16 @@ def check_password(stored_hash, password):
         return check_password_hash(stored_hash, password)
     except Exception:
         return False
+
+@app.before_request
+def check_valid_session():
+    if 'user_id' in session:
+        # If the user's session exists but the user is not in the database (e.g. DB wiped)
+        user = User.query.get(session['user_id'])
+        if not user:
+            session.clear()
+            flash("Your session has expired or your account was deleted. Please register or log in again.", "error")
+            return redirect(url_for('login'))
 
 
 # Custom Authentication Decorators
@@ -319,8 +363,10 @@ def organization_dashboard(org_slug):
     for c in org_claims:
         if c.blueprint_name not in crafters_map:
             crafters_map[c.blueprint_name] = []
+            
+        username = c.user.username if c.user else f"Unknown User ({c.user_id})"
         crafters_map[c.blueprint_name].append({
-            'username': c.user.username,
+            'username': username,
             'user_id': c.user_id,
             'claim_id': c.id
         })
