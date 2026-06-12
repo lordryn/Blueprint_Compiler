@@ -1,6 +1,6 @@
 # **🛠️ Blueprint Compiler**
 
-![Portal Hub Dashboard](assets/portal_hub.png)
+![Portal Hub Dashboard](assets/portal_hub.webp)
 
 **Internal Documentation & Developer Guide**
 
@@ -17,9 +17,14 @@ The application is built as a multi-tenant, role-based requisition management ap
 * **Multi-Tenant Organizations:** Users can register accounts, create organizations with unique URL slugs (e.g. `/org/my-org`), send requests to join existing organizations, and manage organization membership.
 * **Role-Based Access Control (RBAC):** Organization members are assigned specific roles which dictate permissions:
   * `Admin`: Full control over org settings, membership approvals, role modifications, and ledger pruning.
-  * `Manager`: Control over claims registry and active requisitions.
-  * `Member`: Standard user; can submit claims ("I HAVE THIS"), make requisitions, and view catalog lists.
+  * `Manager`: Control over claims registry, active requisitions, crafting queue, and material inventory.
+  * `Member`: Standard user; can submit claims ("I HAVE THIS"), make requisitions, check the crafting queue, and view catalog lists.
   * `Viewer`: Read-only observer.
+* **Requisition & Crafting Pipeline:** Complete end-to-end management of organizational needs.
+  * Members submit requisitions with context notes for requested blueprints.
+  * Crafters use the system to automatically deduct the precise required grade of materials from the organization inventory.
+  * Jobs are tracked via real-time timers and automatically processed by an active background task scheduler.
+  * Finished items are queued for distribution to fulfill the original requisitions.
 * **Global Site Administration:** A specialized portal designed for global control:
   * Manually approve or suspend new user accounts.
   * Grant global Site Admin privileges to other users.
@@ -28,7 +33,7 @@ The application is built as a multi-tenant, role-based requisition management ap
   * **Grabber (`bp_catalog_grabber.py`):** Uses Selenium (Chrome headless driver) to download dynamic fabricator items from the web database, saving raw components to `blueprints unprocessed.txt`.
   * **Parser (`blueprint_parser.py`):** Parses raw HTML components using BeautifulSoup4, compiling names, categories, sizes, manufacturers, crafting times, and material quantities into `blueprints.json`.
   * **Automated Scheduler:** A background `Flask-APScheduler` task runs the Grabber and Parser nightly to keep the catalog fresh automatically.
-* **Dynamic Claim Ledger (SQLite):** User details, tenant organizations, membership roles, claims, requisitions, and join requests are managed with `Flask-SQLAlchemy` and stored in `crafters.db`.
+* **Dynamic Claim Ledger (SQLite):** User details, tenant organizations, membership roles, claims, requisitions, inventory, and join requests are managed with `Flask-SQLAlchemy` and stored in `crafters.db`.
 * **Visual Styling:** Styled using custom CSS variables (`--app-panel`, `--app-line`, and `--app-text`) for a sleek, modern UI.
 
 ---
@@ -36,11 +41,11 @@ The application is built as a multi-tenant, role-based requisition management ap
 ## **📸 Interface Showcases**
 
 ### **Organization Dashboard & Ledger**
-![Organization Dashboard](assets/org_dashboard.png)
-*Interactive ledgers where users can tag themselves as crafters, submit requisitions, and administrators can prune inactive claims.*
+![Organization Dashboard](assets/org_dashboard.webp)
+*Interactive ledgers where users can tag themselves as crafters, submit requisitions, check the real-time crafting queue, allocate materials, and track finished goods.*
 
 ### **Site Administration Portal**
-![Site Administration Portal](assets/site_admin.png)
+![Site Administration Portal](assets/site_admin.webp)
 *Centralized management for user account approvals, manual user creation, and controlling the background data catalog pipelines.*
 
 ---
