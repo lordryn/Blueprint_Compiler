@@ -248,6 +248,8 @@
 
     <script>
         const craftableBlueprints = {{ craftable_blueprints | tojson | safe if craftable_blueprints else '[]' }};
+        const allBlueprints = {{ all_blueprints | tojson | safe if all_blueprints else '[]' }};
+        const materialList = {{ material_list | tojson | safe if material_list else '[]' }};
         
         function openCraftModal(bpName, requisitionId = '') {
             document.getElementById('craftBlueprintName').value = bpName;
@@ -255,7 +257,7 @@
             document.getElementById('craftModalTitle').innerText = (requisitionId ? 'Fulfill Requisition: ' : 'Craft ') + bpName;
             document.getElementById('craftModal').style.display = 'flex';
             
-            const bp = craftableBlueprints.find(b => b.blueprint_name === bpName);
+            const bp = allBlueprints.find(b => b.blueprint_name === bpName);
             const manualDiv = document.getElementById('manualInputs');
             manualDiv.innerHTML = '<p style="color:#a0aec0; font-size:0.9em; margin-top:0;">Specify how much of each grade to use for each material:</p>';
             
@@ -264,25 +266,26 @@
                     const match = mat.amount ? mat.amount.toString().match(/^([\d.]+)/) : null;
                     const reqAmt = match ? parseFloat(match[1]) : 0;
                     if (reqAmt > 0) {
+                        const inv = materialList.find(m => m.name === mat.name) || {baseline: 0, improved: 0, high_quality: 0, exceptional: 0};
                         manualDiv.innerHTML += `
                             <div style="margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid #1a1f29;">
                                 <strong style="color:var(--app-line);">${mat.name} (Need ${reqAmt})</strong>
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:5px;">
                                     <div>
-                                        <label style="font-size:0.8em;"><span class="grade-badge bg-baseline">500Q</span></label>
-                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_baseline" value="0" style="width:100%;">
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-baseline">500Q</span> (Max: ${inv.baseline})</label>
+                                        <input type="number" step="0.01" min="0" max="${inv.baseline}" name="mat_${mat.name}_baseline" value="0" style="width:100%;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.8em;"><span class="grade-badge bg-improved">501-749</span></label>
-                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_improved" value="0" style="width:100%;">
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-improved">501-749</span> (Max: ${inv.improved})</label>
+                                        <input type="number" step="0.01" min="0" max="${inv.improved}" name="mat_${mat.name}_improved" value="0" style="width:100%;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.8em;"><span class="grade-badge bg-highquality">750-899</span></label>
-                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_highquality" value="0" style="width:100%;">
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-highquality">750-899</span> (Max: ${inv.high_quality})</label>
+                                        <input type="number" step="0.01" min="0" max="${inv.high_quality}" name="mat_${mat.name}_high_quality" value="0" style="width:100%;">
                                     </div>
                                     <div>
-                                        <label style="font-size:0.8em;"><span class="grade-badge bg-exceptional">900+</span></label>
-                                        <input type="number" step="0.01" min="0" name="mat_${mat.name}_exceptional" value="0" style="width:100%;">
+                                        <label style="font-size:0.8em;"><span class="grade-badge bg-exceptional">900-1000</span> (Max: ${inv.exceptional})</label>
+                                        <input type="number" step="0.01" min="0" max="${inv.exceptional}" name="mat_${mat.name}_exceptional" value="0" style="width:100%;">
                                     </div>
                                 </div>
                             </div>

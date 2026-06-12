@@ -36,7 +36,7 @@ class User(db.Model):
     # Relationships
     org_roles = db.relationship('UserOrganizationRole', back_populates='user', cascade='all, delete-orphan')
     claims = db.relationship('Claim', back_populates='user', cascade='all, delete-orphan')
-    requisitions = db.relationship('Requisition', back_populates='user', cascade='all, delete-orphan')
+    requisitions = db.relationship('Requisition', foreign_keys='Requisition.user_id', back_populates='user', cascade='all, delete-orphan')
     join_requests = db.relationship('JoinRequest', back_populates='user', cascade='all, delete-orphan')
 
     def __repr__(self):

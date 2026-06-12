@@ -717,7 +717,8 @@ def organization_materials(org_slug):
             craftable_blueprints.append({
                 'blueprint_name': bp['blueprint_name'],
                 'category': bp.get('category', 'Other'),
-                'max_craftable': max_craftable
+                'max_craftable': max_craftable,
+                'materials': bp.get('materials', [])
             })
             
     craftable_blueprints.sort(key=lambda x: (-x['max_craftable'], x['blueprint_name']))
@@ -747,6 +748,7 @@ def organization_materials(org_slug):
                            org=org,
                            material_list=material_list,
                            craftable_blueprints=craftable_blueprints,
+                           all_blueprints=blueprints,
                            user_role=user_role.role.name if user_role else 'Viewer')
 
 # --- Unified Admin Dashboard ---
