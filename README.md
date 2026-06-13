@@ -1,7 +1,5 @@
 # **🛠️ Blueprint Compiler**
 
-![Portal Hub Dashboard](assets/portal_hub.webp)
-
 **Internal Documentation & Developer Guide**
 
 This repository contains the source code for a Multi-Tenant Requisition & Crafter Ledger System (Blueprint Compiler). This application serves as an internal multi-tenant organizational tool to bridge the gap between members requiring specific items and the crafters who hold the necessary blueprints.
@@ -38,15 +36,11 @@ The application is built as a multi-tenant, role-based requisition management ap
 
 ---
 
-## **📸 Interface Showcases**
+## **📸 Interface Showcase**
 
-### **Organization Dashboard & Ledger**
-![Organization Dashboard](assets/org_dashboard.webp)
-*Interactive ledgers where users can tag themselves as crafters, submit requisitions, check the real-time crafting queue, allocate materials, and track finished goods.*
-
-### **Site Administration Portal**
-![Site Administration Portal](assets/site_admin.webp)
-*Centralized management for user account approvals, manual user creation, and controlling the background data catalog pipelines.*
+### **Application Walkthrough**
+![App Walkthrough](assets/app_walkthrough.webp)
+*An end-to-end interactive look at the Ledger System: Organization Dashboard, Crafting Queue, Material Requisitions, and the Global Site Administration Portal.*
 
 ---
 
