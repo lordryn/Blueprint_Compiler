@@ -1,5 +1,7 @@
 # **🛠️ Blueprint Compiler**
 
+![Portal Hub Dashboard](assets/portal_hub.png)
+
 **Internal Documentation & Developer Guide**
 
 This repository contains the source code for a Multi-Tenant Requisition & Crafter Ledger System (Blueprint Compiler). This application serves as an internal multi-tenant organizational tool to bridge the gap between members requiring specific items and the crafters who hold the necessary blueprints.
@@ -34,13 +36,15 @@ The application is built as a multi-tenant, role-based requisition management ap
 * **Dynamic Claim Ledger (SQLite):** User details, tenant organizations, membership roles, claims, requisitions, inventory, and join requests are managed with `Flask-SQLAlchemy` and stored in `crafters.db`.
 * **Visual Styling:** Styled using custom CSS variables (`--app-panel`, `--app-line`, and `--app-text`) for a sleek, modern UI.
 
----
+## **📸 Interface Showcases**
 
-## **📸 Interface Showcase**
+### **Organization Dashboard & Ledger**
+![Organization Dashboard](assets/org_dashboard.png)
+*Interactive ledgers where users can tag themselves as crafters, submit requisitions, check the real-time crafting queue, allocate materials, and track finished goods.*
 
-### **Application Walkthrough**
-![App Walkthrough](assets/app_walkthrough.webp)
-*An end-to-end interactive look at the Ledger System: Organization Dashboard, Crafting Queue, Material Requisitions, and the Global Site Administration Portal.*
+### **Site Administration Portal**
+![Site Administration Portal](assets/site_admin.png)
+*Centralized management for user account approvals, manual user creation, and controlling the background data catalog pipelines.*
 
 ---
 
