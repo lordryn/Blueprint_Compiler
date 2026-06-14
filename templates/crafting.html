@@ -20,7 +20,6 @@
             margin: 0;
             padding: 40px;
         }
-        }
         .section {
             background-color: var(--app-panel);
             border: 1px solid var(--border-color);
@@ -132,9 +131,15 @@
                                 <input type="hidden" name="action" value="cancel"/>
                                 <button type="submit" class="btn btn-danger" onclick="return confirm('Cancel this job and refund materials?')">Cancel</button>
                             </form>
+                        {% elif job.status in ['Completed', 'Cancelled'] and user_role in ['Admin', 'Manager'] %}
+                            <form method="POST" action="/org/{{ org.slug }}/crafting/edit/{{ job.id }}" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="action" value="remove_history"/>
+                                <button type="submit" class="btn btn-danger" style="background:#2d3d52;" onclick="return confirm('Remove this job from the history log?')">Clear Log</button>
+                            </form>
                         {% endif %}
                         {% if job.user_id == session.user_id or user_role == 'Admin' %}
-                            <button type="button" class="btn" style="background:#4a5568; color:white; margin-top:5px;" onclick="openEditModal('{{ job.id }}', '{{ job.blueprint_name | replace("'", "\\'") }}', '{{ job.notes | replace("'", "\\'") if job.notes else "" }}')">Edit Details</button>
+                            <button type="button" class="btn" style="background:#4a5568; color:white; margin-top:5px;" onclick="openEditModal('{{ job.id }}', '{{ job.blueprint_name | replace("'", "\\'") }}', '{{ job.notes | replace("'", "\\'") if job.notes else "" }}', '{{ job.status }}')">Edit Details</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -165,6 +170,22 @@
                     <textarea name="notes" id="editNotes" rows="3" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;"></textarea>
                 </div>
                 
+                {% if user_role in ['Admin', 'Manager'] %}
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Status (Warning: Manual changes bypass standard checks)</label>
+                    <select name="status" id="editStatus" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;">
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                {% endif %}
+                
+                <div style="margin-bottom: 20px;" id="adjustTimeContainer">
+                    <label style="display:block; margin-bottom:10px; font-weight:bold; color:var(--app-line);">Adjust Timer (minutes, e.g. 5 or -10)</label>
+                    <input type="number" name="adjust_minutes" id="editAdjustMinutes" style="width:100%; box-sizing:border-box; padding:10px; background:#10141d; color:var(--app-text); border:1px solid var(--border-color); border-radius:4px;" placeholder="0">
+                </div>
+                
                 <div style="display:flex; justify-content:flex-end; gap:10px;">
                     <button type="button" class="btn" style="background:#2d3d52; color:white;" onclick="closeEditModal()">CANCEL</button>
                     <button type="submit" class="btn">SAVE CHANGES</button>
@@ -174,10 +195,22 @@
     </div>
 
     <script>
-        function openEditModal(jobId, bpName, notes) {
+        function openEditModal(jobId, bpName, notes, status) {
             document.getElementById('editForm').action = "/org/{{ org.slug }}/crafting/edit/" + jobId;
             document.getElementById('editBlueprintName').value = bpName;
             document.getElementById('editNotes').value = notes;
+            
+            const statusEl = document.getElementById('editStatus');
+            if(statusEl) statusEl.value = status;
+            
+            const timeEl = document.getElementById('adjustTimeContainer');
+            if(timeEl) {
+                timeEl.style.display = (status === 'In Progress') ? 'block' : 'none';
+            }
+            
+            const adjustMins = document.getElementById('editAdjustMinutes');
+            if(adjustMins) adjustMins.value = "";
+            
             document.getElementById('editModal').style.display = 'flex';
         }
         function closeEditModal() {

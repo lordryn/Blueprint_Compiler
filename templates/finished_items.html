@@ -20,7 +20,6 @@
             margin: 0;
             padding: 40px;
         }
-        }
         .section {
             background-color: var(--app-panel);
             border: 1px solid var(--border-color);
@@ -119,7 +118,17 @@
                                 <input type="number" name="remove_qty" value="1" min="1" max="{{ item.quantity }}">
                                 <button type="submit" class="btn" style="background-color: #3b82f6; color: white;">Distribute</button>
                             </form>
-                            <form method="POST" action="/org/{{ org.slug }}/finished-items" style="display:inline; margin-right: 10px;">
+                            <script>
+                                function confirmRequeue(form) {
+                                    if (confirm("Were the materials lost?\n\nClick OK if YES (materials lost, start from scratch).\nClick Cancel if NO (materials salvaged, restart crafting job without new deductions).")) {
+                                        form.action.value = "requeue_lost";
+                                    } else {
+                                        form.action.value = "requeue_not_lost";
+                                    }
+                                    return true;
+                                }
+                            </script>
+                            <form method="POST" action="/org/{{ org.slug }}/finished-items" style="display:inline; margin-right: 10px;" onsubmit="return confirmRequeue(this);">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <input type="hidden" name="item_id" value="{{ item.id }}"/>
                                 <input type="hidden" name="action" value="requeue"/>

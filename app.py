@@ -631,6 +631,23 @@ def delete_requisition(org_slug, req_id):
     flash("Requisition removed successfully.", "success")
     return redirect(url_for('organization_dashboard', org_slug=org_slug))
 
+@app.route('/org/<org_slug>/requisition/<int:req_id>/status', methods=['POST'])
+@login_required
+@organization_role_required(['Admin', 'Manager'])
+def edit_requisition_status(org_slug, req_id):
+    org = Organization.query.filter_by(slug=org_slug).first_or_404()
+    req = Requisition.query.filter_by(id=req_id, organization_id=org.id).first_or_404()
+    
+    new_status = request.form.get('status')
+    if new_status in ['Pending', 'In Progress', 'Fulfilled', 'Cancelled']:
+        req.status = new_status
+        if new_status == 'Pending':
+            req.crafter_id = None
+        db.session.commit()
+        flash(f"Requisition status updated to {new_status}.", "success")
+        
+    return redirect(url_for('requisitions_page', org_slug=org_slug))
+
 
 # --- Material Logging & What Can Be Made ---
 
@@ -1121,12 +1138,62 @@ def edit_crafting_job(org_slug, job_id):
             except ValueError:
                 pass
                 
+    elif action == 'remove_history':
+        if job.status in ['Completed', 'Cancelled']:
+            db.session.delete(job)
+            flash("Job removed from history.", "success")
+            
     elif action == 'edit_details':
         if job.user_id == session.get('user_id') or user_role.role.name == 'Admin':
             job.notes = request.form.get('notes', '').strip()
             new_bp = request.form.get('blueprint_name')
             if new_bp:
                 job.blueprint_name = new_bp
+                
+            if user_role.role.name in ['Admin', 'Manager']:
+                new_status = request.form.get('status')
+                if new_status in ['In Progress', 'Completed', 'Cancelled'] and new_status != job.status:
+                    if new_status == 'Completed':
+                        job.status = 'Completed'
+                        job.completion_time = datetime.datetime.utcnow()
+                        existing = None
+                        if not job.requisition_id:
+                            existing = FinishedItem.query.filter_by(organization_id=org.id, blueprint_name=job.blueprint_name, requisition_id=None).first()
+                        if existing:
+                            existing.quantity += 1
+                        else:
+                            fi = FinishedItem(organization_id=org.id, blueprint_name=job.blueprint_name, requisition_id=job.requisition_id, notes=job.notes)
+                            db.session.add(fi)
+                    elif new_status == 'Cancelled' and job.status == 'In Progress':
+                        if job.deduction_data:
+                            try:
+                                deductions = json.loads(job.deduction_data)
+                                for mat_name, grades in deductions.items():
+                                    inv = MaterialInventory.query.filter_by(organization_id=org.id, material_name=mat_name).first()
+                                    if inv:
+                                        inv.grade_baseline += grades.get('baseline', 0)
+                                        inv.grade_improved += grades.get('improved', 0)
+                                        inv.grade_high_quality += grades.get('high_quality', 0)
+                                        inv.grade_exceptional += grades.get('exceptional', 0)
+                            except Exception as e:
+                                app.logger.error(f"Failed to refund materials for job {job.id}: {e}")
+                        job.status = 'Cancelled'
+                        if job.requisition_id:
+                            req = Requisition.query.get(job.requisition_id)
+                            if req:
+                                req.status = 'Pending'
+                                req.crafter_id = None
+                    else:
+                        job.status = new_status
+
+            adjust_minutes = request.form.get('adjust_minutes')
+            if adjust_minutes and job.status == 'In Progress':
+                try:
+                    mins = int(adjust_minutes)
+                    job.completion_time += timedelta(minutes=mins)
+                except ValueError:
+                    pass
+                    
             flash("Job details updated.", "success")
         else:
             flash("You don't have permission to edit this job.", "error")
@@ -1161,12 +1228,54 @@ def finished_items(org_slug):
             else:
                 db.session.delete(item)
                 flash(f"Distributed all of {item.blueprint_name}.", "success")
-        elif action == 'requeue':
-            # They want to requeue this. Pass the item details back to materials to re-select
+        elif action == 'requeue_lost':
+            if item.requisition_id:
+                req = Requisition.query.get(item.requisition_id)
+                if req:
+                    req.status = 'Pending'
+                    req.crafter_id = None
             db.session.delete(item)
             db.session.commit()
             flash("Item removed from Finished queue. Please re-craft it.", "info")
             return redirect(url_for('organization_materials', org_slug=org_slug, requeue_bp=item.blueprint_name, requeue_req=item.requisition_id))
+        elif action == 'requeue_not_lost':
+            bp_name = item.blueprint_name
+            req_id = item.requisition_id
+            notes = item.notes
+            
+            blueprints = load_blueprint_catalog()
+            bp = next((b for b in blueprints if b['blueprint_name'] == bp_name), None)
+            time_delta = parse_crafting_time(bp.get('crafting_time', '0s')) if bp else timedelta()
+            now = datetime.datetime.utcnow()
+            
+            if req_id:
+                req = Requisition.query.get(req_id)
+                if req:
+                    req.status = 'In Progress'
+                    req.crafter_id = session.get('user_id')
+                    
+            job = CraftingJob(
+                organization_id=org.id,
+                user_id=session.get('user_id'),
+                requisition_id=req_id,
+                blueprint_name=bp_name,
+                status='In Progress',
+                notes=notes,
+                start_time=now,
+                completion_time=now + time_delta,
+                deduction_data="{}"
+            )
+            db.session.add(job)
+            
+            if item.quantity > 1:
+                item.quantity -= 1
+            else:
+                db.session.delete(item)
+                
+            db.session.commit()
+            flash(f"Re-crafting {bp_name} without new material deduction.", "success")
+            return redirect(url_for('crafting_queue', org_slug=org_slug))
+
         else: # remove
             if qty_to_remove >= item.quantity:
                 db.session.delete(item)

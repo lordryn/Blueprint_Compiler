@@ -144,6 +144,18 @@
                             </form>
                             {% endif %}
                         {% endif %}
+                        {% if user_role in ['Admin', 'Manager'] %}
+                            <form action="/org/{{ org.slug }}/requisition/{{ req.id }}/status" method="POST" style="display:inline; margin-left:5px;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <select name="status" onchange="this.form.submit()" style="background-color:#10141d; color:white; border:1px solid #2d3d52; padding:3px; border-radius:3px; font-size:0.8em; margin-top:2px;">
+                                    <option value="" disabled selected>Edit Status</option>
+                                    <option value="Pending" {% if req.status == 'Pending' %}selected{% endif %}>Pending</option>
+                                    <option value="In Progress" {% if req.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                                    <option value="Fulfilled" {% if req.status == 'Fulfilled' %}selected{% endif %}>Fulfilled</option>
+                                    <option value="Cancelled" {% if req.status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
+                                </select>
+                            </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
